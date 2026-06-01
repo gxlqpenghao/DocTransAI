@@ -1,0 +1,234 @@
+{
+  "schema_version": "doctransai_v1_candidate_pair_manifest_v1",
+  "created_at": "2026-05-26",
+  "status": "candidate_review",
+  "source_collection": "../../../文件类型汇总",
+  "notes": [
+    "候选样本暂不进入正式批跑清单。",
+    "一份源文档允许对应多个模板，用来验证内容重组与缺失字段保守留空。",
+    "图片样本优先用于验证 DataProxy visual assets 的消费，以及 DocTransAI 的模板近似图片回填能力。"
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "path": "../01_候选源文档_Source/S01_DOCX冬季专项检查通报/关于11月份冬季施工专项检查情况的通报.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/冬季专项检查/关于11月份冬季施工专项检查情况的通报.docx",
+      "kind": "docx",
+      "observed_media_count": 6,
+      "selection_reason": "多劳务队、多隐患、多整改要求，且有现场图片。"
+    },
+    {
+      "id": "S02",
+      "path": "../01_候选源文档_Source/S02_DOC监理通知图文源/监理通知单010.doc",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/监理检查/监理通知单010.doc",
+      "kind": "doc",
+      "observed_media_count_after_docx_materialization": 7,
+      "selection_reason": "legacy DOC 监理通知单，质量/安全问题混合，附件含隐患照片。"
+    },
+    {
+      "id": "S03",
+      "path": "../01_候选源文档_Source/S03_DOCX第三方巡查长报告/第三方检查-柳东新区官塘片曙光大道（雒容段）工程第三方巡查评估报告 202205031.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/第三方检查-柳东新区官塘片曙光大道（雒容段）工程第三方巡查评估报告 202205031.docx",
+      "kind": "docx",
+      "observed_media_count": 29,
+      "selection_reason": "长报告、多表格、多图片，用于验证摘要整理和图片候选选择。"
+    },
+    {
+      "id": "S04",
+      "path": "../01_候选源文档_Source/S04_PDF集团年中整改单/整改单.pdf",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/集团年中检查/整改单.pdf",
+      "kind": "pdf",
+      "observed_pdf_pages": 13,
+      "observed_image_objects": 13,
+      "selection_reason": "PDF/扫描型整改单，适合验证图片资产抽取和回填。"
+    },
+    {
+      "id": "S05",
+      "path": "../01_候选源文档_Source/S05_DOCX东城安全检查表/环资公司安全检查记录表（2022.3.7 核心区纵二路东段、纵三路）.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/东城业主检查回复/环资公司安全检查记录表（2022.3.7 核心区纵二路东段、纵三路）.docx",
+      "kind": "docx",
+      "observed_media_count": 13,
+      "selection_reason": "Word 表格行记录包含隐患照片、描述、要求、期限、整改后照片。"
+    },
+    {
+      "id": "S06",
+      "path": "../01_候选源文档_Source/S06_XLSX安全检查台账/安全检查台账.xlsx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/安全检查台账.xlsx",
+      "kind": "xlsx",
+      "observed_media_count": 25,
+      "selection_reason": "行级隐患台账，适合验证 xlsx 行记录到 docx/xlsx 的转换。"
+    },
+    {
+      "id": "S07",
+      "path": "../01_候选源文档_Source/S07_DOCX项目安全环保检查记录/安全环保检查记录表.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/项目安全检查/安全环保检查记录表.docx",
+      "kind": "docx",
+      "observed_media_count": 0,
+      "selection_reason": "结构化检查记录，适合验证少图或无图时的保守填充。"
+    }
+  ],
+  "templates": [
+    {
+      "id": "T01",
+      "path": "../02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/部分文档模版/安全隐患整改记录单.docx",
+      "kind": "docx",
+      "selection_reason": "覆盖检查、整改、复查和多照片占位。"
+    },
+    {
+      "id": "T02",
+      "path": "../02_候选模板_Template/T02_DOCX安全隐患整改通知单/安全隐患整改通单（项目）.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/部分文档模版/安全隐患整改通单（项目）.docx",
+      "kind": "docx",
+      "selection_reason": "短通知文体，适合验证同源内容重组。"
+    },
+    {
+      "id": "T03",
+      "path": "../02_候选模板_Template/T03_DOCX质量安全检查处罚通知单/质量安全检查处罚通知单（分公司）.docx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/部分文档模版/质量安全检查处罚通知单（分公司）.docx",
+      "kind": "docx",
+      "selection_reason": "字段与源文档常不完全一致，适合验证缺失字段留空。"
+    },
+    {
+      "id": "T04",
+      "path": "../02_候选模板_Template/T04_XLSX安全检查台账模板/安全检查台账模版.xlsx",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/部分文档模版/安全检查台账模版.xlsx",
+      "kind": "xlsx",
+      "template_role": "filled_sample_template",
+      "normalize_sample_template": true,
+      "selection_reason": "已带样例数据的台账模板，需要先复制净化样例行，再作为基础表格输出模板。"
+    },
+    {
+      "id": "T05",
+      "path": "../02_候选模板_Template/T05_DOC安全质量问题整改回复单模板/安全质量问题整改回复单模板.doc",
+      "origin_path": "/Users/paul/Coding/DocTransAI/文件类型汇总/原始数据/东城业主检查回复/安全质量问题整改回复单模板.doc",
+      "kind": "doc",
+      "template_role": "filled_sample_template",
+      "normalize_sample_template": true,
+      "selection_reason": "已带样例内容和图片的 legacy DOC 回复单，需要先物化并净化，再验证模板物化和图片排版。"
+    }
+  ],
+  "pairs": [
+    {
+      "case_id": "candidate_s01_winter_to_record",
+      "source_id": "S01",
+      "template_id": "T01",
+      "priority": "high",
+      "focus": ["same_source_multi_template", "multi_issue_list", "image_with_caption"]
+    },
+    {
+      "case_id": "candidate_s01_winter_to_notice",
+      "source_id": "S01",
+      "template_id": "T02",
+      "priority": "high",
+      "focus": ["same_source_multi_template", "content_reorganization", "image_region"]
+    },
+    {
+      "case_id": "candidate_s01_winter_to_penalty",
+      "source_id": "S01",
+      "template_id": "T03",
+      "priority": "medium",
+      "focus": ["same_source_multi_template", "missing_field_should_remain_blank"]
+    },
+    {
+      "case_id": "candidate_s02_supervisor_to_record",
+      "source_id": "S02",
+      "template_id": "T01",
+      "priority": "high",
+      "focus": ["legacy_doc_source", "quality_safety_mixed_issues", "image_attachment"]
+    },
+    {
+      "case_id": "candidate_s02_supervisor_to_penalty",
+      "source_id": "S02",
+      "template_id": "T03",
+      "priority": "medium",
+      "focus": ["non_isomorphic_template", "conservative_fill"]
+    },
+    {
+      "case_id": "candidate_s02_supervisor_to_reply_doc",
+      "source_id": "S02",
+      "template_id": "T05",
+      "priority": "high",
+      "normalize_sample_template": true,
+      "focus": ["legacy_doc_template", "photo_appendix_layout"]
+    },
+    {
+      "case_id": "candidate_s03_long_report_to_record",
+      "source_id": "S03",
+      "template_id": "T01",
+      "priority": "high",
+      "focus": ["long_document", "summary_generation", "image_candidate_selection"]
+    },
+    {
+      "case_id": "candidate_s03_long_report_to_ledger",
+      "source_id": "S03",
+      "template_id": "T04",
+      "priority": "medium",
+      "normalize_sample_template": true,
+      "focus": ["long_document", "table_output_boundary"]
+    },
+    {
+      "case_id": "candidate_s04_pdf_order_to_record",
+      "source_id": "S04",
+      "template_id": "T01",
+      "priority": "high",
+      "focus": ["pdf_image_source", "visual_asset_consumption"]
+    },
+    {
+      "case_id": "candidate_s04_pdf_order_to_reply_doc",
+      "source_id": "S04",
+      "template_id": "T05",
+      "priority": "high",
+      "normalize_sample_template": true,
+      "focus": ["pdf_image_source", "legacy_doc_template", "photo_layout"]
+    },
+    {
+      "case_id": "candidate_s05_table_to_record",
+      "source_id": "S05",
+      "template_id": "T01",
+      "priority": "high",
+      "focus": ["word_table_rows", "before_after_images", "deadline_fields"]
+    },
+    {
+      "case_id": "candidate_s05_table_to_reply_doc",
+      "source_id": "S05",
+      "template_id": "T05",
+      "priority": "high",
+      "normalize_sample_template": true,
+      "focus": ["word_table_rows", "legacy_doc_template", "photo_layout"]
+    },
+    {
+      "case_id": "candidate_s06_xlsx_to_record",
+      "source_id": "S06",
+      "template_id": "T01",
+      "priority": "medium",
+      "focus": ["xlsx_row_records", "image_anchor_consumption"]
+    },
+    {
+      "case_id": "candidate_s06_xlsx_to_ledger",
+      "source_id": "S06",
+      "template_id": "T04",
+      "priority": "medium",
+      "normalize_sample_template": true,
+      "focus": ["xlsx_to_xlsx", "row_level_output"]
+    },
+    {
+      "case_id": "candidate_s07_check_record_to_notice",
+      "source_id": "S07",
+      "template_id": "T02",
+      "priority": "medium",
+      "focus": ["low_or_no_image_source", "missing_image_should_remain_blank"]
+    }
+  ],
+  "promotion_policy": {
+    "next_step": "人工审核后，为确认样本生成 DataProxy fresh bundle，再写入正式 V1 manifest。",
+    "initial_manifest_status": "observe",
+    "ready_criteria": [
+      "DataProxy bundle 自包含 source text/table/image assets。",
+      "DocTransAI 输出不破坏模板结构和主要样式。",
+      "图片样本至少能证明图片资产被消费并近似回填到模板图片区。",
+      "缺失字段不乱填，报告中能说明未填原因。",
+      "已填样例模板必须先在工作副本中净化，原始模板文件不得被修改。"
+    ]
+  }
+}

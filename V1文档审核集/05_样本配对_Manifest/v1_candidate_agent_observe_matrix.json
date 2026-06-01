@@ -1,0 +1,66 @@
+{
+  "schema_version": "doctransai_v1_case_manifest_v1",
+  "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260526_expanded_candidates_latest/parsed_document_bundle.json",
+  "cases": [
+    {
+      "case_id": "candidate_s01_winter_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S01_DOCX冬季专项检查通报/关于11月份冬季施工专项检查情况的通报.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "expanded observe: multi-issue Word notice with six images to rectification record"
+    },
+    {
+      "case_id": "candidate_s01_winter_to_notice_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S01_DOCX冬季专项检查通报/关于11月份冬季施工专项检查情况的通报.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T02_DOCX安全隐患整改通知单/安全隐患整改通单（项目）.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "expanded observe: same source into a different notice template"
+    },
+    {
+      "case_id": "candidate_s03_long_report_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S03_DOCX第三方巡查长报告/第三方检查-柳东新区官塘片曙光大道（雒容段）工程第三方巡查评估报告 202205031.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "expanded observe: long report requires extraction and summarization before filling"
+    },
+    {
+      "case_id": "candidate_s04_pdf_order_to_reply_doc_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S04_PDF集团年中整改单/整改单.pdf",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T05_DOC安全质量问题整改回复单模板/安全质量问题整改回复单模板.doc",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": true,
+      "notes": "expanded observe: PDF image source into normalized legacy DOC reply template"
+    },
+    {
+      "case_id": "candidate_s07_check_record_to_notice_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S07_DOCX项目安全环保检查记录/安全环保检查记录表.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T02_DOCX安全隐患整改通知单/安全隐患整改通单（项目）.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "expanded observe: no-image source should fill conservatively and leave missing visuals blank"
+    }
+  ]
+}

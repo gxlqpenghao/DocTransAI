@@ -1,0 +1,21 @@
+.DS_Store
+
+# Python / test caches
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+
+# Local/generated DocTransAI artifacts
+artifacts/
+outputs/
+tmp/
+runtime/
+文件类型汇总/
+
+# Build outputs and logs
+build/
+dist/
+*.log

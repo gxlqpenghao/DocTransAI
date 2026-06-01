@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doctransai.local/contracts/agent_mapping_decision_v1.schema.json",
+  "title": "DocTransAI Agent Mapping Decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decisions"],
+  "properties": {
+    "schema_version": {"const": "doctransai_agent_mapping_decision_v1"},
+    "decisions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/decision"}
+    }
+  },
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "decision",
+        "candidate_id",
+        "generated_value",
+        "confidence",
+        "reason"
+      ],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "decision": {"enum": ["candidate", "generated", "unresolved"]},
+        "candidate_id": {"type": ["string", "null"]},
+        "candidate_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "generated_value": {"type": ["string", "null"]},
+        "confidence": {"type": "number"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

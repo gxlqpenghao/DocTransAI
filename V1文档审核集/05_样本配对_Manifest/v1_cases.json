@@ -1,0 +1,103 @@
+{
+  "schema_version": "doctransai_v1_case_manifest_v1",
+  "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260525_all_sources_latest/parsed_document_bundle.json",
+  "cases": [
+    {
+      "case_id": "xlsx_row6_to_docx_record",
+      "enabled": true,
+      "status": "ready",
+      "source_file_path": "../01_被转换文档_Source/01_结构化台账源/安全检查台账.xlsx",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260521/parsed_document_bundle.json",
+      "template_path": "../02_目标模板_Template/01_DOCX整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [
+        "../03_参考成品_Reference/02_五定表/质安隐患整改五定表2022.3.21.doc"
+      ],
+      "primary_record_id": "range_1cd5d52e9f25",
+      "use_mapping_agent": false,
+      "notes": "baseline: same structured row rendered to整改记录单"
+    },
+    {
+      "case_id": "xlsx_row6_to_docx_notice",
+      "enabled": true,
+      "status": "ready",
+      "source_file_path": "../01_被转换文档_Source/01_结构化台账源/安全检查台账.xlsx",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260521/parsed_document_bundle.json",
+      "template_path": "../02_目标模板_Template/02_DOCX整改通知单/安全隐患整改通单（项目）.docx",
+      "reference_paths": [
+        "../03_参考成品_Reference/01_分公司整改反馈/分公司质安隐患整改反馈单2022.3.21.doc"
+      ],
+      "primary_record_id": "range_1cd5d52e9f25",
+      "use_mapping_agent": false,
+      "notes": "baseline: same structured row rendered to整改通知单"
+    },
+    {
+      "case_id": "xlsx_row6_to_docx_penalty",
+      "enabled": true,
+      "status": "ready",
+      "source_file_path": "../01_被转换文档_Source/01_结构化台账源/安全检查台账.xlsx",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260521/parsed_document_bundle.json",
+      "template_path": "../02_目标模板_Template/03_DOCX处罚通知单/质量安全检查处罚通知单（分公司）.docx",
+      "reference_paths": [],
+      "primary_record_id": "range_1cd5d52e9f25",
+      "use_mapping_agent": false,
+      "notes": "baseline: same structured row rendered to处罚通知单, observe unresolved people fields"
+    },
+    {
+      "case_id": "xlsx_row6_to_xlsx_register",
+      "enabled": true,
+      "status": "ready",
+      "source_file_path": "../01_被转换文档_Source/01_结构化台账源/安全检查台账.xlsx",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260521/parsed_document_bundle.json",
+      "template_path": "../02_目标模板_Template/04_XLSX台账模板/安全检查台账模版.xlsx",
+      "reference_paths": [],
+      "primary_record_id": "range_1cd5d52e9f25",
+      "use_mapping_agent": false,
+      "notes": "baseline: same structured row rendered to台账模板"
+    },
+    {
+      "case_id": "word_table_to_docx_record",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../01_被转换文档_Source/02_Word表格源/环资公司安全检查记录表（2022.3.7 核心区纵二路东段、纵三路）.docx",
+      "template_path": "../02_目标模板_Template/01_DOCX整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": false,
+      "notes": "observe: bundle exists but current record granularity is sparse"
+    },
+    {
+      "case_id": "word_list_to_docx_notice",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../01_被转换文档_Source/03_Word正文列表源/关于3月份安全生产大检查情况的通报.doc",
+      "template_path": "../02_目标模板_Template/02_DOCX整改通知单/安全隐患整改通单（项目）.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": false,
+      "notes": "observe: narrative list source, currently limited structured slots"
+    },
+    {
+      "case_id": "complex_docx_to_docx_record",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../01_被转换文档_Source/04_复杂检查记录源/附件1：广西路桥工程集团有限公司市政分公司2022年第一季度安全标准化检查记录表.docx",
+      "template_path": "../02_目标模板_Template/01_DOCX整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": false,
+      "notes": "observe: long-form check record, useful for extraction gap tracking"
+    },
+    {
+      "case_id": "scitech_pdf_to_docx_innovation_form_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../01_被转换文档_Source/05_科技成果长文档PDF源/工程建设科学技术进步奖提名书-AI-数理双驱动的隧道地质信息融合解译与风险评估关键技术.pdf",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260525_scitech_pdf/parsed_document_bundle.json",
+      "template_path": "../02_目标模板_Template/05_DOC科技创新成果信息表/附件 广西住房城乡建设领域科技创新成果信息表.docx",
+      "reference_paths": [],
+      "primary_record_id": "ev_d8bcd7fad410",
+      "use_mapping_agent": true,
+      "notes": "observe: latest scitech PDF bundle to technology innovation form via mapping agent path"
+    }
+  ]
+}

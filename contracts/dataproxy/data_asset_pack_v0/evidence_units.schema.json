@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack_v0/evidence_units.schema.json",
+  "title": "DataProxy Evidence Unit v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "evidence_id",
+    "document_id",
+    "source_path",
+    "source_checksum",
+    "document_title",
+    "object_type",
+    "object_id",
+    "text",
+    "locator",
+    "structure",
+    "modality",
+    "asset_refs",
+    "visual_quality_flags",
+    "quality"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "data_asset_pack_v0"
+    },
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_checksum": {
+      "type": ["string", "null"]
+    },
+    "document_title": {
+      "type": "string"
+    },
+    "object_type": {
+      "enum": ["section", "table", "sheet", "cell_range"]
+    },
+    "object_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "text": {
+      "type": "string"
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_anchor",
+        "page_start",
+        "page_end",
+        "section_id",
+        "section_title",
+        "table_id",
+        "table_title",
+        "sheet_id",
+        "sheet_name",
+        "cell_range_id",
+        "cell_range"
+      ],
+      "properties": {
+        "page_anchor": {"type": ["string", "null"]},
+        "page_start": {"type": ["string", "null"]},
+        "page_end": {"type": ["string", "null"]},
+        "section_id": {"type": ["string", "null"]},
+        "section_title": {"type": ["string", "null"]},
+        "table_id": {"type": ["string", "null"]},
+        "table_title": {"type": ["string", "null"]},
+        "sheet_id": {"type": ["string", "null"]},
+        "sheet_name": {"type": ["string", "null"]},
+        "cell_range_id": {"type": ["string", "null"]},
+        "cell_range": {"type": ["string", "null"]}
+      }
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_kind",
+        "is_atomic_block",
+        "section_level",
+        "subdocument_index",
+        "subdocument_label",
+        "parser_signals_present"
+      ],
+      "properties": {
+        "evidence_kind": {
+          "enum": ["generic_section", "table", "sheet_range", "cover", "toc", null]
+        },
+        "is_atomic_block": {"type": "boolean"},
+        "section_level": {"type": ["integer", "null"]},
+        "subdocument_index": {"type": ["integer", "null"]},
+        "subdocument_label": {"type": ["string", "null"]},
+        "parser_signals_present": {"type": "boolean"},
+        "parser_signals": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "modality": {
+      "enum": ["text", "table", "image", "mixed"]
+    },
+    "asset_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "visual_quality_flags": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue_code"},
+      "uniqueItems": true
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/issue"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["info", "warning", "error"]
+    },
+    "issue_code": {
+      "enum": [
+        "missing_document_id",
+        "missing_source_path",
+        "missing_source_checksum",
+        "empty_text",
+        "missing_locator",
+        "invalid_char_range",
+        "duplicate_evidence_text",
+        "orphan_evidence",
+        "table_empty",
+        "table_missing_title",
+        "section_missing_title",
+        "section_level_anomaly",
+        "parser_signals_missing",
+        "source_truth_mismatch",
+        "visual_asset_unregistered",
+        "asset_unlinked",
+        "referenced_asset_missing",
+        "visual_asset_nearby",
+        "visual_context_required",
+        "image_text_not_extracted",
+        "chart_or_diagram_not_parsed",
+        "scanned_page_text_low_confidence",
+        "qa_answer_unsupported",
+        "qa_locator_unresolvable",
+        "qa_visual_context_unmarked",
+        "export_contract_violation"
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": {"$ref": "#/$defs/issue_code"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "message": {"type": "string"},
+        "field": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "asset_id": {"type": ["string", "null"]},
+        "qa_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

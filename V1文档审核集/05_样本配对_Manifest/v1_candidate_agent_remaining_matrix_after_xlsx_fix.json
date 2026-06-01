@@ -1,0 +1,90 @@
+{
+  "schema_version": "doctransai_v1_case_manifest_v1",
+  "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260526_expanded_candidates_after_xlsx_fix/parsed_document_bundle.json",
+  "cases": [
+    {
+      "case_id": "candidate_s01_winter_to_penalty_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S01_DOCX冬季专项检查通报/关于11月份冬季施工专项检查情况的通报.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T03_DOCX质量安全检查处罚通知单/质量安全检查处罚通知单（分公司）.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: same winter source to penalty notice, expected conservative fill for missing penalty-specific fields"
+    },
+    {
+      "case_id": "candidate_s02_supervisor_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S02_DOC监理通知图文源/监理通知单010.doc",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: supervisor notice with photos to rectification record"
+    },
+    {
+      "case_id": "candidate_s02_supervisor_to_penalty_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S02_DOC监理通知图文源/监理通知单010.doc",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T03_DOCX质量安全检查处罚通知单/质量安全检查处罚通知单（分公司）.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: supervisor notice to penalty notice"
+    },
+    {
+      "case_id": "candidate_s03_long_report_to_ledger_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S03_DOCX第三方巡查长报告/第三方检查-柳东新区官塘片曙光大道（雒容段）工程第三方巡查评估报告 202205031.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T04_XLSX安全检查台账模板/安全检查台账模版.xlsx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": true,
+      "notes": "remaining observe: long report to normalized xlsx ledger template"
+    },
+    {
+      "case_id": "candidate_s04_pdf_order_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S04_PDF集团年中整改单/整改单.pdf",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: PDF rectification order to docx rectification record"
+    },
+    {
+      "case_id": "candidate_s05_table_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S05_DOCX东城安全检查表/环资公司安全检查记录表（2022.3.7 核心区纵二路东段、纵三路）.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: Word table source to docx rectification record; current bundle still has no visual assets for this source"
+    },
+    {
+      "case_id": "candidate_s06_xlsx_to_record_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S06_XLSX安全检查台账/安全检查台账.xlsx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T01_DOCX安全隐患整改记录单/安全隐患整改记录单.docx",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": false,
+      "notes": "remaining observe: xlsx ledger source to docx rectification record after DataProxy SameFileError fix"
+    }
+  ]
+}

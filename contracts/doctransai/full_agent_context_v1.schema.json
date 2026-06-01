@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doctransai.local/contracts/doctransai/full_agent_context_v1.schema.json",
+  "title": "DocTransAI Full Agent Context v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "full_source_context",
+    "full_template_context",
+    "navigation_context",
+    "task_context"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "doctransai_full_agent_context_v1"
+    },
+    "full_source_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "documents",
+        "records",
+        "image_assets",
+        "diagnostics",
+        "document_view",
+        "record_count",
+        "image_asset_count",
+        "diagnostic_count"
+      ],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "image_assets": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "object_index": {
+          "type": "object",
+          "readOnly": true,
+          "additionalProperties": false,
+          "required": [
+            "by_object_key"
+          ],
+          "properties": {
+            "by_object_key": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "readOnly": true,
+                "additionalProperties": false,
+                "required": [
+                  "object_kind",
+                  "object_id",
+                  "collection",
+                  "index"
+                ],
+                "properties": {
+                  "object_kind": {
+                    "enum": [
+                      "record",
+                      "image_asset"
+                    ]
+                  },
+                  "object_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "collection": {
+                    "enum": [
+                      "records",
+                      "image_assets"
+                    ]
+                  },
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "document_view": {
+          "type": "string"
+        },
+        "primary_record_id": {
+          "type": "string"
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "image_asset_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostic_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "full_template_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "template",
+        "slots",
+        "repeat_regions",
+        "header_regions",
+        "diagnostics",
+        "document_view",
+        "visual_pages",
+        "slot_count",
+        "repeat_region_count",
+        "header_region_count"
+      ],
+      "properties": {
+        "template": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "template_id",
+                "template_path",
+                "format_key",
+                "analyzer_key"
+              ],
+              "properties": {
+                "template_id": {
+                  "type": "string"
+                },
+                "template_path": {
+                  "type": "string"
+                },
+                "format_key": {
+                  "type": "string"
+                },
+                "analyzer_key": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "repeat_regions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "header_regions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "visual_pages": {
+          "type": "array"
+        },
+        "slot_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repeat_region_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "header_region_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "navigation_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "authority",
+        "source_instance_overview",
+        "source_cluster_plan"
+      ],
+      "properties": {
+        "authority": {
+          "const": "navigation_only_not_evidence"
+        },
+        "source_instance_overview": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_cluster_plan": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "task_context": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

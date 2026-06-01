@@ -1,0 +1,44 @@
+{
+  "schema_version": "doctransai_v1_case_manifest_v1",
+  "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260526_sample_template_matrix/parsed_document_bundle.json",
+  "cases": [
+    {
+      "case_id": "sample_s02_supervisor_doc_to_reply_doc_normalized_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S02_DOC监理通知图文源/监理通知单010.doc",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T05_DOC安全质量问题整改回复单模板/安全质量问题整改回复单模板.doc",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": true,
+      "notes": "observe: legacy DOC source to filled DOC sample reply template; template is materialized then sample-normalized before analysis/rendering"
+    },
+    {
+      "case_id": "sample_s05_word_table_to_reply_doc_normalized_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../06_扩展样本候选_文件类型汇总/01_候选源文档_Source/S05_DOCX东城安全检查表/环资公司安全检查记录表（2022.3.7 核心区纵二路东段、纵三路）.docx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T05_DOC安全质量问题整改回复单模板/安全质量问题整改回复单模板.doc",
+      "reference_paths": [],
+      "primary_record_id": null,
+      "use_mapping_agent": true,
+      "normalize_sample_template": true,
+      "notes": "observe: Word table source to filled DOC sample reply template; validates table-derived issues plus sample-template cleanup"
+    },
+    {
+      "case_id": "sample_s06_xlsx_to_xlsx_ledger_normalized_agent",
+      "enabled": true,
+      "status": "observe",
+      "source_file_path": "../01_被转换文档_Source/01_结构化台账源/安全检查台账.xlsx",
+      "template_path": "../06_扩展样本候选_文件类型汇总/02_候选模板_Template/T04_XLSX安全检查台账模板/安全检查台账模版.xlsx",
+      "bundle_path": "../../artifacts/dataproxy_fresh_probe_20260521/parsed_document_bundle.json",
+      "reference_paths": [],
+      "primary_record_id": "range_1cd5d52e9f25",
+      "use_mapping_agent": true,
+      "normalize_sample_template": true,
+      "notes": "observe: fallback to existing xlsx bundle because latest DataProxy fresh bundle still raises SameFileError for the copied S06 candidate; validates xlsx sample-template cleanup"
+    }
+  ]
+}
+

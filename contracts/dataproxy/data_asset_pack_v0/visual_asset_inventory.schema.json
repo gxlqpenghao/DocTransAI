@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack_v0/visual_asset_inventory.schema.json",
+  "title": "DataProxy Visual Asset v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "asset_id",
+    "document_id",
+    "source_path",
+    "asset_type",
+    "page_anchor",
+    "bbox",
+    "caption",
+    "nearby_section_id",
+    "nearby_table_id",
+    "source_ref",
+    "checksum",
+    "sheet_name",
+    "cell_anchor",
+    "cell_range",
+    "row_index",
+    "column_index",
+    "asset_source",
+    "quality"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "data_asset_pack_v0"
+    },
+    "asset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "asset_type": {
+      "enum": ["image", "figure", "chart", "diagram", "scanned_page"]
+    },
+    "page_anchor": {
+      "type": ["string", "null"]
+    },
+    "bbox": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 4,
+          "maxItems": 4
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "caption": {
+      "type": ["string", "null"]
+    },
+    "nearby_section_id": {
+      "type": ["string", "null"]
+    },
+    "nearby_table_id": {
+      "type": ["string", "null"]
+    },
+    "source_ref": {
+      "type": ["string", "null"]
+    },
+    "checksum": {
+      "type": ["string", "null"]
+    },
+    "sheet_name": {
+      "type": ["string", "null"]
+    },
+    "cell_anchor": {
+      "type": ["string", "null"]
+    },
+    "cell_range": {
+      "type": ["string", "null"]
+    },
+    "row_index": {
+      "type": ["integer", "null"]
+    },
+    "column_index": {
+      "type": ["integer", "null"]
+    },
+    "asset_source": {
+      "type": ["string", "null"]
+    },
+    "related_evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "page_co_located_evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "nearby_text_before": {
+      "type": ["string", "null"]
+    },
+    "nearby_text_after": {
+      "type": ["string", "null"]
+    },
+    "related_evidence_preview": {
+      "type": ["string", "null"]
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/issue"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["info", "warning", "error"]
+    },
+    "issue_code": {
+      "enum": [
+        "missing_document_id",
+        "missing_source_path",
+        "missing_source_checksum",
+        "empty_text",
+        "missing_locator",
+        "invalid_char_range",
+        "duplicate_evidence_text",
+        "orphan_evidence",
+        "table_empty",
+        "table_missing_title",
+        "section_missing_title",
+        "section_level_anomaly",
+        "parser_signals_missing",
+        "source_truth_mismatch",
+        "visual_asset_unregistered",
+        "asset_unlinked",
+        "referenced_asset_missing",
+        "visual_asset_nearby",
+        "visual_context_required",
+        "image_text_not_extracted",
+        "chart_or_diagram_not_parsed",
+        "scanned_page_text_low_confidence",
+        "weak_caption",
+        "missing_image_asset_reference",
+        "missing_visual_locator",
+        "xlsx_image_anchor_incomplete",
+        "xlsx_image_anchor_mismatch",
+        "xlsx_image_range_malformed",
+        "xlsx_image_unexpected_asset_path",
+        "xlsx_image_source_mismatch",
+        "qa_answer_unsupported",
+        "qa_locator_unresolvable",
+        "qa_visual_context_unmarked",
+        "export_contract_violation"
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": {"$ref": "#/$defs/issue_code"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "message": {"type": "string"},
+        "field": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "asset_id": {"type": ["string", "null"]},
+        "qa_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

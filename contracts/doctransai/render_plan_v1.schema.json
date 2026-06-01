@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doctransai.local/contracts/render_plan_v1.schema.json",
+  "title": "DocTransAI RenderPlan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "source_bundle_path",
+    "template",
+    "output",
+    "text_fills",
+    "image_placements",
+    "unresolved_slots",
+    "diagnostics",
+    "created_at",
+    "record_plans"
+  ],
+  "properties": {
+    "schema_version": {"const": "doctransai_render_plan_v1"},
+    "plan_id": {"type": "string", "minLength": 1},
+    "source_bundle_path": {"type": "string", "minLength": 1},
+    "template": {"$ref": "#/$defs/template_ref"},
+    "output": {"$ref": "#/$defs/output_ref"},
+    "text_fills": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/text_fill"}
+    },
+    "image_placements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/image_placement"}
+    },
+    "unresolved_slots": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/unresolved_slot"}
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/diagnostic"}
+    },
+    "created_at": {"type": "string", "minLength": 1},
+    "record_plans": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/row_plan"}
+    }
+  },
+  "$defs": {
+    "template_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_path", "format_key", "template_id"],
+      "properties": {
+        "template_path": {"type": "string", "minLength": 1},
+        "format_key": {"type": "string", "minLength": 1},
+        "template_id": {"type": ["string", "null"]}
+      }
+    },
+    "output_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_path", "output_format"],
+      "properties": {
+        "output_path": {"type": "string", "minLength": 1},
+        "output_format": {"type": "string", "minLength": 1}
+      }
+    },
+    "target_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format_key",
+        "target_kind",
+        "paragraph_index",
+        "cell_paragraph_index",
+        "run_index",
+        "run_end_index",
+        "table_index",
+        "row_index",
+        "column_index",
+        "sheet_name",
+        "cell_ref",
+        "page_index",
+        "form_field_name",
+        "bbox",
+        "notes",
+        "repeat_region_id",
+        "instance_index"
+      ],
+      "properties": {
+        "format_key": {"type": "string", "minLength": 1},
+        "target_kind": {"type": "string", "minLength": 1},
+        "paragraph_index": {"type": ["integer", "null"]},
+        "cell_paragraph_index": {"type": ["integer", "null"]},
+        "run_index": {"type": ["integer", "null"]},
+        "run_end_index": {"type": ["integer", "null"]},
+        "table_index": {"type": ["integer", "null"]},
+        "row_index": {"type": ["integer", "null"]},
+        "column_index": {"type": ["integer", "null"]},
+        "sheet_name": {"type": ["string", "null"]},
+        "cell_ref": {"type": ["string", "null"]},
+        "page_index": {"type": ["integer", "null"]},
+        "form_field_name": {"type": ["string", "null"]},
+        "bbox": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 4,
+              "maxItems": 4
+            },
+            {"type": "null"}
+          ]
+        },
+        "notes": {"type": ["string", "null"]},
+        "repeat_region_id": {"type": ["string", "null"]},
+        "instance_index": {"type": ["integer", "null"]},
+        "allow_same_name_residual_fill": {"type": "boolean"}
+      }
+    },
+    "provenance_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "document_id",
+        "evidence_id",
+        "asset_id",
+        "object_id",
+        "locator",
+        "source_path"
+      ],
+      "properties": {
+        "source_kind": {"type": "string", "minLength": 1},
+        "document_id": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "asset_id": {"type": ["string", "null"]},
+        "object_id": {"type": ["string", "null"]},
+        "locator": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "source_path": {"type": ["string", "null"]}
+      }
+    },
+    "text_fill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "target",
+        "value",
+        "provenance_refs",
+        "value_type",
+        "confidence",
+        "transform"
+      ],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "target": {"$ref": "#/$defs/target_ref"},
+        "value": {"type": "string"},
+        "provenance_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/provenance_ref"}
+        },
+        "value_type": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number"},
+        "transform": {"type": ["string", "null"]}
+      }
+    },
+    "image_placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "asset_id",
+        "source_ref",
+        "target",
+        "provenance_refs",
+        "sizing_policy",
+        "caption"
+      ],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "asset_id": {"type": "string", "minLength": 1},
+        "source_ref": {"type": ["string", "null"]},
+        "target": {"$ref": "#/$defs/target_ref"},
+        "provenance_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/provenance_ref"}
+        },
+        "sizing_policy": {"type": "string", "minLength": 1},
+        "caption": {"type": ["string", "null"]},
+        "caption_slot_id": {"type": ["string", "null"]},
+        "caption_target": {
+          "anyOf": [
+            {"$ref": "#/$defs/target_ref"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "unresolved_slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "canonical_key",
+        "reason_code",
+        "message",
+        "candidate_ids",
+        "provenance_refs"
+      ],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "canonical_key": {"type": "string", "minLength": 1},
+        "reason_code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "candidate_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "provenance_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/provenance_ref"}
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message", "field"],
+      "properties": {
+        "severity": {"type": "string", "minLength": 1},
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "field": {"type": ["string", "null"]}
+      }
+    },
+    "row_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "repeat_region_id", "slot_ids"],
+      "properties": {
+        "record_id": {"type": "string", "minLength": 1},
+        "repeat_region_id": {"type": ["string", "null"]},
+        "slot_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

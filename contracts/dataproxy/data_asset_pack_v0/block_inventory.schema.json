@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack_v0/block_inventory.schema.json",
+  "title": "DataProxy Block Inventory v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "block_id",
+    "document_id",
+    "source_path",
+    "block_type",
+    "page_anchor",
+    "bbox",
+    "sheet_name",
+    "range_ref",
+    "order_index",
+    "section_id",
+    "table_id",
+    "sheet_id",
+    "cell_range_id",
+    "evidence_ids",
+    "asset_id",
+    "parser_name",
+    "parser_signals",
+    "source_text",
+    "quality"
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack_v0"},
+    "block_id": {"type": "string", "minLength": 1},
+    "document_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "block_type": {"type": "string", "minLength": 1},
+    "page_anchor": {"type": ["string", "null"]},
+    "bbox": {
+      "anyOf": [
+        {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        {"type": "null"}
+      ]
+    },
+    "sheet_name": {"type": ["string", "null"]},
+    "range_ref": {"type": ["string", "null"]},
+    "order_index": {"type": "integer"},
+    "section_id": {"type": ["string", "null"]},
+    "table_id": {"type": ["string", "null"]},
+    "sheet_id": {"type": ["string", "null"]},
+    "cell_range_id": {"type": ["string", "null"]},
+    "evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "asset_id": {"type": ["string", "null"]},
+    "parser_name": {"type": "string", "minLength": 1},
+    "parser_signals": {"type": "object"},
+    "source_text": {"type": ["string", "null"]},
+    "quality": {"$ref": "#/$defs/quality"}
+  },
+  "$defs": {
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    }
+  }
+}
