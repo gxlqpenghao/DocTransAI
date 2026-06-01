@@ -1,205 +1,158 @@
-# Agent-Centric Mapping Clean Rebuild Implementation Plan
+# Agent-Centric Mapping Skeleton Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild the mapping layer so template slots are filled by an agent using complete source/template context and validated provenance, instead of being gated by the legacy `primary_record -> candidates -> resolver` path.
+**Goal:** Build the smallest clean mapping channel that lets an agent fill template text/images from complete structured source/template evidence and page render images, then measure what this skeleton can actually do.
 
-**Architecture:** Keep DataProxy as the upstream parser and keep existing DocTransAI readers, template analyzers, renderers, validators, and reports where they are stable. Replace the mapping decision center with a single agent-centric flow: context package -> agent slot decisions -> deterministic validation -> `RenderPlan v1` assembly. Legacy rule-first mapping remains reference-only until explicitly needed as a deterministic hint provider.
+**Architecture:** Keep DataProxy as the upstream parser. Keep existing DocTransAI readers, template analyzers, render plan model, renderers, validators, and reports only where they are directly needed by the skeleton. The new path is: evidence package -> agent decisions -> deterministic validation -> current render plan payload -> renderer.
 
-**Tech Stack:** Python 3.12, `uv`, `python-docx`, `openpyxl`, existing DataProxy bundle contracts, existing `RenderPlan v1`, existing LLM client with request-size governance.
+**Tech Stack:** Python 3.12, `uv`, existing DataProxy bundle contracts, existing DocTransAI template analysis, existing render plan model, existing DOCX renderer, existing LLM client governance.
 
 ---
 
-## Non-Negotiable Boundaries
+## Hard Boundaries
 
 - Do not modify DataProxy.
-- Do not implement `RenderPlan v2`.
-- Do not make renderers read bundles, clusters, or agent context directly.
-- Do not use `primary_record` as a required global mapping gate.
-- Do not let rule-generated candidates decide what the agent is allowed to see.
-- Do not accept agent decisions without provenance validation.
-- Do not treat navigation/index summaries as evidence.
-- Do not claim success unless source-existing text/images required by the template are filled or explicitly marked unresolved with a defensible evidence reason.
+- Do not put development-stage labels into new module names, function names, schema names, or prompt names.
+- Do not introduce a new render plan schema in this phase.
+- Do not rewrite renderers.
+- Do not migrate legacy candidate generation, resolver, planner, source instance, or source cluster machinery into the new path.
+- Do not run the whole review matrix as the first milestone.
+- Do not claim success from tests alone; the skeleton must be judged on a real sample output.
 
 ## Required Agent Inputs
 
-The agent must receive these four input surfaces in one coherent context package:
+The agent receives exactly these four evidence surfaces:
 
-- Source structured content from the upstream DataProxy bundle: records, tables, rows, cells, images, nearby text, diagnostics, provenance, page anchors, bbox, and object index.
-- Source document page render images referenced from the upstream bundle. If page render images are missing, the context builder must report this as a required-input gap instead of silently degrading to text-only mapping.
-- Template structured content produced by DocTransAI: slots, placeholders, blank fill regions, tables, repeat regions, template text view, slot addresses, and expected output targets.
-- Template page render images produced by DocTransAI template visual preview. If template render images are missing, the context builder must report this as a required-input gap.
+- Source structured content from the upstream DataProxy-derived bundle: records, tables, rows, cells, images, nearby text, diagnostics, provenance, page anchors, bbox, and stable object identifiers when available.
+- Source document page render images referenced from the upstream bundle. If source page render images are missing, record an input gap instead of silently pretending text-only evidence is complete.
+- Template structured content produced by DocTransAI: slots, placeholders, blank fill regions, tables, repeat regions, template text view, slot addresses, and output targets.
+- Template page render images produced by DocTransAI template visual preview. If template page render images are missing, record an input gap.
 
-## Success Target
+## Skeleton Acceptance Target
 
-The first hard acceptance case is `word_table_to_docx_record`.
+First real target: `word_table_to_docx_record`.
 
-Expected behavior:
+Expected first result:
 
-- No manual `primary_record_id`.
-- The agent can use the DataProxy structured source view and template view to fill source-existing fields such as project name, hazard type, hazard description, rectification requirement, rectification deadline, and inspection date.
-- Every filled value has a source reference that resolves to a real DataProxy-derived object.
-- Missing images remain unresolved only when the source bundle has no usable image asset.
-- Output still uses existing `RenderPlan v1` and existing DOCX renderer.
+- No manual global source record selection.
+- No legacy candidate resolver deciding what the agent may see.
+- Source-existing text required by the template is filled when the agent cites valid source evidence.
+- Source-existing images required by the template are placed when the source bundle exposes usable image assets.
+- Missing or invalid evidence becomes unresolved with a concrete reason.
+- Rendering still goes through the existing render plan model and existing renderer.
 
-## Files And Responsibilities
+## Minimal File Layout
 
-- Reuse: `src/doctransai/data_layer/*`
-  Read and validate DataProxy bundle sidecars.
-- Reuse: `src/doctransai/source_model/*`
-  Adapt parsed bundle into DocTransAI source objects; may add read-only helpers, but do not add mapping decisions here.
-- Reuse: `src/doctransai/templates/*`
-  Analyze template slots, placeholders, blank regions, repeat regions, and template visual previews.
-- Reuse: `src/doctransai/llm/client.py`
-  Keep request body and input-length governance.
-- Reuse: `src/doctransai/models/render_plan.py`
-  Continue emitting `RenderPlan v1`.
-- Create: `src/doctransai/agentic_context/models.py`
-  Typed data model for the source/template context package given to the agent.
-- Create: `src/doctransai/agentic_context/builder.py`
-  Build complete source/template context and page-image references without rule-first filtering.
-- Create: `src/doctransai/agentic_mapping/decision_models.py`
-  Typed model for agent slot decisions.
-- Create: `src/doctransai/agentic_mapping/mapper.py`
-  Invoke the agent and parse decisions.
+- Create: `src/doctransai/agentic_mapping/context.py`
+  Build the four-surface evidence package. This module wraps existing parsed objects; it must not decide mappings.
+- Create: `src/doctransai/agentic_mapping/decisions.py`
+  Define the minimal agent decision shape for text fills, image placements, and unresolved slots.
 - Create: `src/doctransai/agentic_mapping/validator.py`
-  Validate values, assets, and source references before rendering.
-- Create: `src/doctransai/agentic_mapping/render_plan_assembler.py`
-  Convert validated decisions into `RenderPlan v1`.
+  Validate that every fill cites source/template evidence present in the evidence package.
+- Create: `src/doctransai/agentic_mapping/assembler.py`
+  Convert validated decisions into the current render plan payload.
+- Create: `src/doctransai/agentic_mapping/mapper.py`
+  Send the evidence package to the agent or a deterministic fake decision client.
 - Create: `src/doctransai/prompts/agentic_mapping_policy.md`
-  Prompt contract for agent-centric mapping.
+  State the evidence rules for the agent.
 - Create: `src/doctransai/workflows/agentic_conversion.py`
-  A clean workflow entrypoint for the rebuilt mapping path.
-- Test: `tests/agentic_context/*`
-- Test: `tests/agentic_mapping/*`
-- Test: `tests/workflows/test_agentic_conversion.py`
+  One clean workflow entrypoint for the skeleton.
+- Create: `tests/agentic_mapping/test_context_channel.py`
+- Create: `tests/agentic_mapping/test_decisions.py`
+- Create: `tests/agentic_mapping/test_validator.py`
+- Create: `tests/agentic_mapping/test_assembler.py`
+- Create: `tests/workflows/test_agentic_conversion.py`
+- Create: `tests/integration/test_agentic_word_table_skeleton.py`
 
-## Chunk 1: Context Package Contract
-
-**Files:**
-- Create: `src/doctransai/agentic_context/models.py`
-- Create: `src/doctransai/agentic_context/builder.py`
-- Create: `tests/agentic_context/test_context_builder.py`
-
-- [ ] **Step 1: Write failing tests for complete source context**
-
-Test a small synthetic bundle-derived `SourceModel` with:
-- one table-level object
-- one table row with values
-- one image asset with page anchor
-- one diagnostic
-
-Expected context includes records, tables, cells, images, diagnostics, provenance refs, page anchors, and object index.
-
-- [ ] **Step 2: Write failing tests for complete template context**
-
-Test a DOCX template analysis fixture with text slots, image slots, repeat regions, and template visual page references.
-
-- [ ] **Step 3: Implement context models**
-
-Define:
-- `AgenticSourceContext`
-- `AgenticTemplateContext`
-- `AgenticMappingContext`
-- `ContextObjectRef`
-- `PageVisualRef`
-
-Keep models simple dataclasses or pydantic-free dict builders, matching current project style.
-
-- [ ] **Step 4: Implement context builder**
-
-Build context from existing `SourceModel` and `TemplateModel`.
-Do not use `primary_record`.
-Do not call legacy candidate builder.
-
-- [ ] **Step 5: Run tests**
-
-Run:
-
-```bash
-uv run pytest tests/agentic_context/test_context_builder.py -q
-```
-
-Expected: all new context tests pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add src/doctransai/agentic_context tests/agentic_context
-git commit -m "feat: add agentic mapping context package"
-```
-
-## Chunk 2: Agent Decision Contract
+## Chunk 1: Evidence Package Skeleton
 
 **Files:**
-- Create: `src/doctransai/agentic_mapping/decision_models.py`
-- Create: `contracts/doctransai/agentic_mapping_decision_v1.schema.json`
-- Create: `tests/agentic_mapping/test_decision_models.py`
+- Create: `src/doctransai/agentic_mapping/context.py`
+- Create: `tests/agentic_mapping/test_context_channel.py`
 
-- [ ] **Step 1: Write failing schema/model tests**
+- [ ] **Step 1: Write failing context test**
 
-Cover:
-- text fill decision
-- image placement decision
-- unresolved decision
-- invalid decision missing source refs
-- invalid decision using navigation-only ref as evidence
+Create a minimal source fixture and template fixture. Assert the context contains:
+- `source.structured`
+- `source.page_images`
+- `source.input_gaps`
+- `template.structured`
+- `template.page_images`
+- `template.input_gaps`
 
-- [ ] **Step 2: Implement decision model**
+- [ ] **Step 2: Verify no legacy mapping dependency**
 
-Decision fields:
-- `slot_id`
-- `decision_type`: `text_fill`, `image_placement`, `unresolved`
-- `value`
-- `asset_id`
-- `source_refs`
-- `confidence`
-- `reason`
-- `unresolved_reason`
+The test should fail if `context.py` imports candidate builders, resolver, planner, source instance, or source cluster modules.
 
-- [ ] **Step 3: Implement JSON schema**
+- [ ] **Step 3: Implement minimal context builder**
 
-Schema must reject decisions that contain neither fill data nor unresolved reason.
+Build a plain dict/dataclass package from existing source/template objects. Preserve facts; do not rank, filter, or choose values.
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run focused test**
 
 ```bash
-uv run pytest tests/agentic_mapping/test_decision_models.py -q
+uv run pytest tests/agentic_mapping/test_context_channel.py -q
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/doctransai/agentic_mapping/decision_models.py contracts/doctransai/agentic_mapping_decision_v1.schema.json tests/agentic_mapping/test_decision_models.py
+git add src/doctransai/agentic_mapping/context.py tests/agentic_mapping/test_context_channel.py
+git commit -m "feat: add agentic evidence package skeleton"
+```
+
+## Chunk 2: Minimal Decision Shape
+
+**Files:**
+- Create: `src/doctransai/agentic_mapping/decisions.py`
+- Create: `tests/agentic_mapping/test_decisions.py`
+
+- [ ] **Step 1: Write failing decision tests**
+
+Cover:
+- text fill decision with `slot_id`, `value`, `source_refs`, and `target_ref`
+- image placement decision with `slot_id`, `asset_ref`, `source_refs`, and `target_ref`
+- unresolved decision with `slot_id` and `reason`
+- invalid fill without source refs
+
+- [ ] **Step 2: Implement minimal models**
+
+Use simple dataclasses or typed dict helpers consistent with the current project style. Do not add a JSON schema until the skeleton proves useful.
+
+- [ ] **Step 3: Run focused test**
+
+```bash
+uv run pytest tests/agentic_mapping/test_decisions.py -q
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/doctransai/agentic_mapping/decisions.py tests/agentic_mapping/test_decisions.py
 git commit -m "feat: define agentic mapping decisions"
 ```
 
-## Chunk 3: Deterministic Decision Validator
+## Chunk 3: Deterministic Validation
 
 **Files:**
 - Create: `src/doctransai/agentic_mapping/validator.py`
 - Create: `tests/agentic_mapping/test_validator.py`
 
-- [ ] **Step 1: Write failing validation tests**
+- [ ] **Step 1: Write failing validator tests**
 
 Cover:
-- accepted text value with exact source object ref
-- accepted image asset id that exists
-- rejected value whose source ref does not exist
-- rejected image asset id that does not exist
-- rejected fill that cites only navigation context
-- unresolved decision is accepted with reason
+- accepted text fill when source refs exist
+- accepted image placement when asset refs exist
+- rejected text fill when source refs are missing
+- rejected image placement when asset refs are missing
+- accepted unresolved decision with reason
 
 - [ ] **Step 2: Implement validator**
 
-Validator must return:
-- accepted decisions
-- rejected decisions
-- diagnostics
+The validator checks references only. It must not fuzzy-match missing evidence and must not call legacy mapping modules.
 
-No rendering should happen here.
-
-- [ ] **Step 3: Run tests**
+- [ ] **Step 3: Run focused test**
 
 ```bash
 uv run pytest tests/agentic_mapping/test_validator.py -q
@@ -212,71 +165,63 @@ git add src/doctransai/agentic_mapping/validator.py tests/agentic_mapping/test_v
 git commit -m "feat: validate agentic mapping decisions"
 ```
 
-## Chunk 4: RenderPlan v1 Assembler
+## Chunk 4: Current Render Payload Assembly
 
 **Files:**
-- Create: `src/doctransai/agentic_mapping/render_plan_assembler.py`
-- Create: `tests/agentic_mapping/test_render_plan_assembler.py`
+- Create: `src/doctransai/agentic_mapping/assembler.py`
+- Create: `tests/agentic_mapping/test_assembler.py`
 
-- [ ] **Step 1: Write failing assembler tests**
+- [ ] **Step 1: Write failing assembler test**
 
-Given validated text and image decisions, assert generated `RenderPlan v1` has:
-- expected `text_fills`
-- expected `image_placements`
-- expected `unresolved_slots`
-- expected provenance refs
-- no `RenderPlan v2` fields
+Given validated text/image decisions, assert the assembler emits the current render plan payload with:
+- text fills
+- image placements
+- unresolved slots
+- provenance references
 
 - [ ] **Step 2: Implement assembler**
 
-Use existing `TemplateSlot.address` to create render targets.
-Do not call old resolver.
-Do not call old planner.
+Use existing template target addresses. Do not call the old planner, resolver, or candidate builder.
 
-- [ ] **Step 3: Run tests**
+- [ ] **Step 3: Run focused test**
 
 ```bash
-uv run pytest tests/agentic_mapping/test_render_plan_assembler.py -q
+uv run pytest tests/agentic_mapping/test_assembler.py -q
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/doctransai/agentic_mapping/render_plan_assembler.py tests/agentic_mapping/test_render_plan_assembler.py
-git commit -m "feat: assemble render plan from agent decisions"
+git add src/doctransai/agentic_mapping/assembler.py tests/agentic_mapping/test_assembler.py
+git commit -m "feat: assemble current render payload from agent decisions"
 ```
 
-## Chunk 5: Agent Mapper And Prompt
+## Chunk 5: Mapper And Prompt
 
 **Files:**
 - Create: `src/doctransai/agentic_mapping/mapper.py`
 - Create: `src/doctransai/prompts/agentic_mapping_policy.md`
 - Create: `tests/agentic_mapping/test_mapper.py`
 
-- [ ] **Step 1: Write failing mapper tests with fake decision client**
+- [ ] **Step 1: Write failing mapper test with fake decision client**
 
-Fake client returns valid decisions for a small template/source fixture.
-Assert mapper parses them and does not invoke legacy candidate builders.
+Fake client receives the evidence package and returns decisions. Assert the mapper parses decisions and does not import legacy mapping modules.
 
 - [ ] **Step 2: Write prompt assertions**
 
 Prompt must state:
-- source context and template context are evidence
-- page render images are evidence when available
-- navigation context is index only
-- fill only if evidence exists
-- return unresolved instead of inventing
+- source structured content is evidence
+- source page render images are evidence
+- template structured content is evidence
+- template page render images are evidence
 - every fill requires source refs
+- unresolved is required when evidence is missing
 
 - [ ] **Step 3: Implement mapper**
 
-Mapper should:
-- build request payload from `AgenticMappingContext`
-- use existing LLM client governance
-- parse decisions
-- return unresolved decisions on preflight block
+Support both a fake decision client for deterministic tests and the existing LLM client for manual runs.
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run focused test**
 
 ```bash
 uv run pytest tests/agentic_mapping/test_mapper.py -q
@@ -286,10 +231,10 @@ uv run pytest tests/agentic_mapping/test_mapper.py -q
 
 ```bash
 git add src/doctransai/agentic_mapping/mapper.py src/doctransai/prompts/agentic_mapping_policy.md tests/agentic_mapping/test_mapper.py
-git commit -m "feat: add agentic mapper"
+git commit -m "feat: add agentic mapper skeleton"
 ```
 
-## Chunk 6: Clean Agentic Workflow
+## Chunk 6: Single Workflow Skeleton
 
 **Files:**
 - Create: `src/doctransai/workflows/agentic_conversion.py`
@@ -297,29 +242,19 @@ git commit -m "feat: add agentic mapper"
 
 - [ ] **Step 1: Write failing workflow test**
 
-Use a fake decision client and the existing DOCX template fixture.
-Assert:
-- bundle is read
-- template is analyzed
-- agent decisions are validated
-- render plan is assembled
-- renderer runs
-- conversion/provenance reports are emitted
+Using a fake decision client, assert the workflow:
+- reads the source bundle
+- analyzes the template
+- builds the evidence package
+- gets agent decisions
+- validates decisions
+- assembles the current render payload
+- renders output
+- writes a compact audit report
 
 - [ ] **Step 2: Implement workflow**
 
-Workflow stages:
-- read bundle
-- adapt source corpus
-- filter source file if supplied
-- analyze/materialize template
-- build agentic context
-- call agent mapper
-- validate decisions
-- assemble `RenderPlan v1`
-- render
-- validate output
-- report
+Keep it narrow. This is not a batch audit system and not a migration of the old workflow.
 
 - [ ] **Step 3: Run workflow test**
 
@@ -331,84 +266,68 @@ uv run pytest tests/workflows/test_agentic_conversion.py -q
 
 ```bash
 git add src/doctransai/workflows/agentic_conversion.py tests/workflows/test_agentic_conversion.py
-git commit -m "feat: add agentic conversion workflow"
+git commit -m "feat: add agentic conversion skeleton"
 ```
 
-## Chunk 7: Acceptance Case Harness
+## Chunk 7: One Real Sample Output
 
 **Files:**
-- Create: `tests/integration/test_agentic_word_table_acceptance.py`
-- Create: `src/doctransai/workflows/agentic_batch_audit.py` only if a separate matrix harness is needed.
+- Create: `tests/integration/test_agentic_word_table_skeleton.py`
 
-- [ ] **Step 1: Write failing acceptance test**
+- [ ] **Step 1: Write deterministic integration test**
 
-Target: `word_table_to_docx_record`.
+Use `word_table_to_docx_record` with a fake decision client first. Assert source-existing fields are rendered and unresolved fields have reasons.
 
-Use a deterministic fake agent decision payload that fills source-existing values from the Word table source. Assert fields are rendered and provenance exists.
+- [ ] **Step 2: Add optional manual LLM run command**
 
-- [ ] **Step 2: Add minimal harness support**
+Only run the real LLM path when credentials are configured. The deterministic test remains the required CI signal.
 
-If needed, add a flag such as `mapping_mode="agentic"` without altering legacy default behavior.
+- [ ] **Step 3: Generate one sample output**
 
-- [ ] **Step 3: Run acceptance test**
+Write output under ignored `outputs/agentic_skeleton/`.
 
-```bash
-uv run pytest tests/integration/test_agentic_word_table_acceptance.py -q
-```
+- [ ] **Step 4: Inspect generated document and report**
 
-- [ ] **Step 4: Commit**
+Classify failures as:
+- source context missing
+- source page image missing
+- template context missing
+- template page image missing
+- agent decision wrong
+- validation rejected valid evidence
+- render target missing
 
-```bash
-git add tests/integration/test_agentic_word_table_acceptance.py src/doctransai/workflows/agentic_batch_audit.py
-git commit -m "test: cover agentic word table acceptance"
-```
-
-## Chunk 8: Matrix Rerun And Decision
-
-**Files:**
-- No production file expected unless test evidence exposes a bug.
-
-- [ ] **Step 1: Run focused tests**
+- [ ] **Step 5: Run focused tests**
 
 ```bash
-uv run pytest tests/agentic_context tests/agentic_mapping tests/workflows/test_agentic_conversion.py -q
+uv run pytest tests/agentic_mapping tests/workflows/test_agentic_conversion.py tests/integration/test_agentic_word_table_skeleton.py -q
 ```
 
-- [ ] **Step 2: Run full tests**
+- [ ] **Step 6: Commit**
 
 ```bash
-uv run pytest -q
+git add tests/integration/test_agentic_word_table_skeleton.py docs
+git commit -m "test: prove agentic skeleton on word table sample"
 ```
 
-- [ ] **Step 3: Run review matrix in agentic mode**
+## Stop And Decide
 
-Use a new output directory under ignored `outputs/`.
+After Chunk 7, stop. Do not expand the architecture automatically.
 
-- [ ] **Step 4: Inspect reports**
+Decision criteria:
 
-Minimum acceptance:
-- `word_table_to_docx_record` fills source-existing text.
-- No provider 400 failures.
-- Rejected decisions are explained by validator diagnostics.
-- Existing renderer behavior remains unchanged.
+- If the skeleton fills the real sample correctly, expand one capability at a time.
+- If it fails because the evidence package lacks facts or page images, fix context ingestion before touching mapping logic.
+- If it fails because the agent makes poor decisions despite complete evidence, improve prompt/decision format before adding rules.
+- If it fails because rendering cannot express the target, then discuss render plan evolution separately.
+- If it fails because the old modules are needed, identify exactly which module and why before migrating it.
 
-- [ ] **Step 5: Commit final harness/docs update**
+## Explicit Non-Goals
 
-```bash
-git add docs tests src
-git commit -m "docs: document agentic v1 acceptance results"
-```
-
-## Stop Conditions
-
-Stop and reassess if:
-
-- The agent cannot cite stable source refs for filled values.
-- Page render images are unavailable from DataProxy and cannot be referenced cleanly.
-- Validator needs fuzzy source matching to accept values.
-- Renderer changes become necessary before `word_table_to_docx_record` works.
-- The implementation starts reintroducing `primary_record` as a required mapping gate.
-
-## Current Non-Goal
-
-Do not solve multi-instance `RenderPlan v2`, XLSX row-band materialization, or arbitrary long-document autonomous delivery in this rebuild. The only current goal is a clean mapping path that fills source-existing template content through agent decisions and deterministic validation.
+- No full review matrix in the first skeleton phase.
+- No source instance or source cluster migration.
+- No candidate packet optimization.
+- No legacy resolver fallback.
+- No renderer rewrite.
+- No direct raw document reading by the agent.
+- No broad report system rewrite.
