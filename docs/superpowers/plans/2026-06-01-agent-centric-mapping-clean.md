@@ -1,8 +1,8 @@
-# V1 Agent-Centric Mapping Clean Rebuild Implementation Plan
+# Agent-Centric Mapping Clean Rebuild Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild the V1 mapping layer so template slots are filled by an agent using complete source/template context and validated provenance, instead of being gated by the legacy `primary_record -> candidates -> resolver` path.
+**Goal:** Rebuild the mapping layer so template slots are filled by an agent using complete source/template context and validated provenance, instead of being gated by the legacy `primary_record -> candidates -> resolver` path.
 
 **Architecture:** Keep DataProxy as the upstream parser and keep existing DocTransAI readers, template analyzers, renderers, validators, and reports where they are stable. Replace the mapping decision center with a single agent-centric flow: context package -> agent slot decisions -> deterministic validation -> `RenderPlan v1` assembly. Legacy rule-first mapping remains reference-only until explicitly needed as a deterministic hint provider.
 
@@ -19,7 +19,16 @@
 - Do not let rule-generated candidates decide what the agent is allowed to see.
 - Do not accept agent decisions without provenance validation.
 - Do not treat navigation/index summaries as evidence.
-- Do not claim V1 success unless source-existing text/images required by the template are filled or explicitly marked unresolved with a defensible evidence reason.
+- Do not claim success unless source-existing text/images required by the template are filled or explicitly marked unresolved with a defensible evidence reason.
+
+## Required Agent Inputs
+
+The agent must receive these four input surfaces in one coherent context package:
+
+- Source structured content from the upstream DataProxy bundle: records, tables, rows, cells, images, nearby text, diagnostics, provenance, page anchors, bbox, and object index.
+- Source document page render images referenced from the upstream bundle. If page render images are missing, the context builder must report this as a required-input gap instead of silently degrading to text-only mapping.
+- Template structured content produced by DocTransAI: slots, placeholders, blank fill regions, tables, repeat regions, template text view, slot addresses, and expected output targets.
+- Template page render images produced by DocTransAI template visual preview. If template render images are missing, the context builder must report this as a required-input gap.
 
 ## Success Target
 
@@ -59,11 +68,11 @@ Expected behavior:
   Convert validated decisions into `RenderPlan v1`.
 - Create: `src/doctransai/prompts/agentic_mapping_policy.md`
   Prompt contract for agent-centric mapping.
-- Create: `src/doctransai/workflows/v1_agentic_conversion.py`
-  A clean workflow entrypoint for the rebuilt V1 path.
+- Create: `src/doctransai/workflows/agentic_conversion.py`
+  A clean workflow entrypoint for the rebuilt mapping path.
 - Test: `tests/agentic_context/*`
 - Test: `tests/agentic_mapping/*`
-- Test: `tests/workflows/test_v1_agentic_conversion.py`
+- Test: `tests/workflows/test_agentic_conversion.py`
 
 ## Chunk 1: Context Package Contract
 
@@ -280,15 +289,15 @@ git add src/doctransai/agentic_mapping/mapper.py src/doctransai/prompts/agentic_
 git commit -m "feat: add agentic mapper"
 ```
 
-## Chunk 6: Clean V1 Workflow
+## Chunk 6: Clean Agentic Workflow
 
 **Files:**
-- Create: `src/doctransai/workflows/v1_agentic_conversion.py`
-- Create: `tests/workflows/test_v1_agentic_conversion.py`
+- Create: `src/doctransai/workflows/agentic_conversion.py`
+- Create: `tests/workflows/test_agentic_conversion.py`
 
 - [ ] **Step 1: Write failing workflow test**
 
-Use a fake decision client and the existing V1 DOCX template.
+Use a fake decision client and the existing DOCX template fixture.
 Assert:
 - bundle is read
 - template is analyzed
@@ -315,21 +324,21 @@ Workflow stages:
 - [ ] **Step 3: Run workflow test**
 
 ```bash
-uv run pytest tests/workflows/test_v1_agentic_conversion.py -q
+uv run pytest tests/workflows/test_agentic_conversion.py -q
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/doctransai/workflows/v1_agentic_conversion.py tests/workflows/test_v1_agentic_conversion.py
-git commit -m "feat: add agentic v1 conversion workflow"
+git add src/doctransai/workflows/agentic_conversion.py tests/workflows/test_agentic_conversion.py
+git commit -m "feat: add agentic conversion workflow"
 ```
 
 ## Chunk 7: Acceptance Case Harness
 
 **Files:**
 - Create: `tests/integration/test_agentic_word_table_acceptance.py`
-- Modify: `src/doctransai/workflows/v1_batch_audit.py` only if a separate agentic entrypoint flag is needed.
+- Create: `src/doctransai/workflows/agentic_batch_audit.py` only if a separate matrix harness is needed.
 
 - [ ] **Step 1: Write failing acceptance test**
 
@@ -350,7 +359,7 @@ uv run pytest tests/integration/test_agentic_word_table_acceptance.py -q
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/integration/test_agentic_word_table_acceptance.py src/doctransai/workflows/v1_batch_audit.py
+git add tests/integration/test_agentic_word_table_acceptance.py src/doctransai/workflows/agentic_batch_audit.py
 git commit -m "test: cover agentic word table acceptance"
 ```
 
@@ -362,7 +371,7 @@ git commit -m "test: cover agentic word table acceptance"
 - [ ] **Step 1: Run focused tests**
 
 ```bash
-uv run pytest tests/agentic_context tests/agentic_mapping tests/workflows/test_v1_agentic_conversion.py -q
+uv run pytest tests/agentic_context tests/agentic_mapping tests/workflows/test_agentic_conversion.py -q
 ```
 
 - [ ] **Step 2: Run full tests**
@@ -371,7 +380,7 @@ uv run pytest tests/agentic_context tests/agentic_mapping tests/workflows/test_v
 uv run pytest -q
 ```
 
-- [ ] **Step 3: Run V1 matrix in agentic mode**
+- [ ] **Step 3: Run review matrix in agentic mode**
 
 Use a new output directory under ignored `outputs/`.
 
@@ -402,4 +411,4 @@ Stop and reassess if:
 
 ## Current Non-Goal
 
-Do not solve multi-instance `RenderPlan v2`, XLSX row-band materialization, or arbitrary long-document autonomous delivery in this rebuild. The only current goal is a clean V1 mapping path that fills source-existing template content through agent decisions and deterministic validation.
+Do not solve multi-instance `RenderPlan v2`, XLSX row-band materialization, or arbitrary long-document autonomous delivery in this rebuild. The only current goal is a clean mapping path that fills source-existing template content through agent decisions and deterministic validation.
