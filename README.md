@@ -10,6 +10,10 @@ The new `convert` entrypoint uses native DataProxy evidence, a single model tool
 and DOCX/XLSX editors. It does not use the legacy source model, slot analyzer, mapping
 planner, or RenderPlan. Legacy modules remain available for comparison.
 
+v1 currently supports installation from a complete source checkout with `uv sync`.
+Keep the `contracts/` directory alongside `src/`; standalone wheel distribution is
+not supported yet. A missing known contract now fails explicitly instead of skipping validation.
+
 ```bash
 uv sync --locked
 

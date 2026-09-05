@@ -165,3 +165,15 @@ def test_inspecting_empty_future_rows_does_not_expand_used_range(tmp_path):
     result=e.inspect(node_ids=['s0!A100:C101'],detail=True)
     assert len(result['nodes'])==6 and all(n['value'] is None for n in result['nodes'])
     assert set(e.book.active._cells)==before and e.book.active.max_row==1
+
+
+def test_image_bounds_inspection_does_not_create_cells(tmp_path):
+    from openpyxl.drawing.image import Image as WorksheetImage
+
+    photo = tmp_path / "photo.png"
+    Image.new("RGB", (10, 10), "blue").save(photo)
+    sheet = Workbook().active
+    sheet.add_image(WorksheetImage(photo), "Z100")
+    before = dict(sheet._cells)
+    assert XlsxEditor._used_bounds(sheet) == (26, 100, 26, 100)
+    assert sheet._cells == before

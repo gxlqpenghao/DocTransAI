@@ -1,0 +1,36 @@
+{
+  "audited_base": "0e3987d",
+  "model": "kimi-k3",
+  "cases": {
+    "notice_docx": {
+      "execution_status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 507.065,
+      "model_request_count": 12,
+      "model_request_seconds": 496.084,
+      "template_unchanged": true,
+      "output_sha256": "a3df1153ae0b8b4d4d2d50f822e2285a7ae5f87ef66ba951a70fc6036c2ea3cc",
+      "delivered_output_pages": [
+        1,
+        2,
+        3
+      ],
+      "output_path": "/Users/paul/Coding/DocTransAI-document-tools/outputs/v1_audit_20260906/notice_docx/result.docx"
+    },
+    "filled_xlsx": {
+      "execution_status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 703.231,
+      "model_request_count": 5,
+      "model_request_seconds": 693.777,
+      "template_unchanged": true,
+      "output_sha256": "4896934ad992bfc7e57f65d197009323b8340e248aae8118c020cd8b505a106e",
+      "delivered_output_pages": [
+        1,
+        2,
+        3
+      ],
+      "output_path": "/Users/paul/Coding/DocTransAI-document-tools/outputs/v1_audit_20260906/filled_xlsx/result.xlsx"
+    }
+  }
+}

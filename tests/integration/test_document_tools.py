@@ -325,3 +325,21 @@ def test_xlsx_conversion_selects_workbook_tools_and_output_extension(tmp_path, m
     assert result.execution_status=='completed',result.issues
     assert result.output_path.endswith('.xlsx') and load_workbook(result.output_path).active['A1'].value=='Example project'
     assert load_workbook(template).active['A1'].value=='sample'
+
+
+def test_post_write_verification_error_never_reports_completed(tmp_path, monkeypatch):
+    corpus, template, image = material(tmp_path)
+    monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle', lambda _: corpus)
+    original = Path.read_bytes
+    def fail_final_check(path):
+        if path.name == 'result.docx':
+            raise OSError('simulated final verification failure')
+        return original(path)
+    monkeypatch.setattr(Path, 'read_bytes', fail_final_check)
+    task = TaskSpec(corpus.bundle_path, template, tmp_path/'run', 'Fill')
+    result = convert(task, client=FakeClient(), previewer=FakePreview(image))
+    assert result.execution_status == 'failed' and result.output_path is None
+    report = json.loads(Path(result.report_path).read_text())
+    assert Path(report['draft_path']).exists()
+    assert not (task.output_dir/'result.docx').exists()
+    assert Document(report['draft_path']).paragraphs[0].text == 'Example project'

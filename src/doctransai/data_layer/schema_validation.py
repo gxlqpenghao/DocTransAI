@@ -40,8 +40,8 @@ def schema_for_component(component_name: str) -> Path | None:
         return None
 
     path = schema_root() / schema_name
-    if not path.exists():
-        return None
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing DataProxy contract schema: {path}. Run from a complete source checkout.")
     return path
 
 

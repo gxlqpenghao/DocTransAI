@@ -283,3 +283,12 @@ def test_knows_local_schema_snapshot_for_supported_components() -> None:
     assert schema_for_component("table_rows").name == "table_rows.schema.json"
     assert schema_for_component("table_cells").name == "table_cells.schema.json"
     assert schema_for_component("source_manifest") is None
+
+
+def test_known_schema_missing_fails_closed(tmp_path, monkeypatch):
+    from doctransai.data_layer import schema_validation
+
+    monkeypatch.setattr(schema_validation, "schema_root", lambda: tmp_path)
+    with pytest.raises(FileNotFoundError, match="Missing DataProxy contract schema"):
+        schema_validation.validate_instance("parsed_document_bundle", {})
+    assert schema_validation.schema_for_component("source_manifest") is None

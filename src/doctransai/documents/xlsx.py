@@ -21,7 +21,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.formula.translate import Translator
-from openpyxl.utils import get_column_letter, range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries, coordinate_to_tuple
 from openpyxl.utils.units import pixels_to_EMU
 from openpyxl.workbook.properties import CalcProperties
 
@@ -149,8 +149,7 @@ class XlsxEditor:
         for image in ws._images:
             anchor = cls._image_cell(image)
             if anchor:
-                cell = ws[anchor]
-                coordinates.append((cell.row, cell.column))
+                coordinates.append(coordinate_to_tuple(anchor))
         if not coordinates:
             return (1, 1, 1, 1)
         rows = [row for row, _ in coordinates]

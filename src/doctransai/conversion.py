@@ -39,6 +39,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
     report = dict(product_version=__version__, workflow="document-tools-v1",
                   task=asdict(task), model=config.model, independent_semantic_review="not_run")
     editor = None
+    final = None
     try:
         if not task.instruction.strip():
             raise ValueError("A conversion instruction is required")
@@ -137,12 +138,23 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                       structural_check="passed", editor_self_check_completed=bool(agent_result),
                       review_only=existing_document is not None)
     except Exception as exc:
+        result.execution_status, result.output_path = "failed", None
+        if result.review_status == "model_passed":
+            result.review_status = "incomplete"
+        draft = editor.output if editor and editor.output.exists() else None
+        if draft is None and final is not None and final.exists():
+            # A late verification failure must not leave a success-labelled result.
+            try:
+                os.replace(final, editor.output)
+                draft = editor.output
+            except OSError:
+                draft = final  # Preserve the recoverable file even if renaming fails.
         secret = getattr(client, "api_key", None)
         message = str(exc).replace(secret, "<redacted>") if secret else str(exc)
         issue = dict(kind="execution_error", error_type=type(exc).__name__, message=message[:1500])
         result.issues.append(issue)
         append_event(trace_path, dict(kind="conversion_error", error=issue))
-        report.update(draft_path=str(editor.output) if editor and editor.output.exists() else None,
+        report.update(draft_path=str(draft) if draft else None,
                       structural_check="not_completed")
     events = [json.loads(line) for log in sorted(output_dir.glob("*.jsonl")) for line in log.read_text().splitlines()]
     requests = [e for e in events if e.get("kind") in ("model", "model_error")]
