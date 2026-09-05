@@ -1,7 +1,7 @@
 """Public single-document entrypoint for the new tool path."""
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 import os
@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 
 from doctransai.agent import append_event, run_agent
+from doctransai import __version__
 from doctransai.config import RuntimeConfig
 from doctransai.data_layer import read_parsed_document_bundle
 from doctransai.data_layer.view import SourceView
@@ -35,7 +36,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
     report_path = output_dir / "review.json"
     trace_path = output_dir / "trace.jsonl"
     result = ConversionResult("failed", "not_run", None, str(report_path))
-    report = dict(task=asdict(task), model=config.model, independent_semantic_review="not_run")
+    report = dict(product_version=__version__, workflow="document-tools-v1",
+                  task=asdict(task), model=config.model, independent_semantic_review="not_run")
     editor = None
     try:
         if not task.instruction.strip():
@@ -73,7 +75,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             progress("生成模板预览" if existing_document is None else "准备原模板对照信息")
         template_pages = previewer.render(task.template_path) if existing_document is None else []
         initial = dict(instruction=task.instruction, primary_source_refs=list(task.source_refs),
-                       source=source.initial(config.initial_source_chars), document=reference_snapshot)
+                       source=source.initial(config.initial_source_chars, primary_refs=task.source_refs), document=reference_snapshot)
         (output_dir / "input.json").write_text(json.dumps(initial, ensure_ascii=False, indent=2))
         parts = [{"type": "text", "text": json.dumps(initial, ensure_ascii=False)}]
         for number, path in enumerate(template_pages, 1):
@@ -114,12 +116,13 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         result.execution_status, result.output_path = "completed", str(final)
         self_check = agent_result.get("editor_self_check", {"issues": [], "missing": []})
         if independent is None:
-            result.issues.extend(dict(kind="editor_self_check", message=m) for m in self_check["issues"])
+            result.issues.extend(dict(kind="editor_self_check", message=m) for m in self_check.get("issues", []))
             result.issues.extend(dict(kind=m["kind"], target=m["target"], message=m["message"])
-                                 for m in self_check["missing"] if m["kind"] in ("ambiguous", "unsupported"))
+                                 for m in self_check.get("missing", []) if m["kind"] in ("ambiguous", "unsupported"))
             if not editor.applied_batches:
                 result.issues.append(dict(kind="no_changes", message="Editor made no changes; confirm that unchanged output is intended"))
             result.review_status = "needs_review" if result.issues else "not_run"
+            report["verification_level"] = "editor_self_check_only; not human or ground-truth acceptance"
         if suffix == ".xlsx":
             report["formula_check"] = "Unmodified formulas preserved; copied formulas translated; workbook recalculates on open. No independent cached-value verification."
         if independent is None:
@@ -154,4 +157,9 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
 
 def review_document(task: TaskSpec, document: Path, **kwargs) -> ConversionResult:
     """Review/repair a copy of an existing output against its ORIGINAL template."""
-    return convert(task, existing_document=document, **kwargs)
+    config = kwargs.pop("config", None)
+    if config is None:
+        config = RuntimeConfig.from_environment(review_enabled=True)
+    elif not config.review_enabled:
+        config = replace(config, review_enabled=True)
+    return convert(task, config=config, existing_document=document, **kwargs)

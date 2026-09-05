@@ -142,21 +142,52 @@ class SourceView:
                                 next_offset=offset + max_chars if offset + max_chars < len(text) else None))
         return dict(objects=objects)
 
-    def initial(self, max_chars: int) -> dict[str, Any]:
-        evidence, used = [], 0
-        for row in self.evidence:
+    def initial(self, max_chars: int, *, primary_refs: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
+        """Build the first model context without creating a second source model.
+
+        Declared primary objects get the first native slices.  The complete
+        objects, including non-primary material, remain available through
+        ``read_source`` and the compact catalog below.
+        """
+        self.check_refs(primary_refs)
+        primary = list(dict.fromkeys(primary_refs))
+        primary_set = set(primary)
+
+        def related(row):
+            refs = {row.get("evidence_id"), row.get("object_id"), *(row.get("asset_refs") or [])}
+            return bool(refs & primary_set)
+
+        primary_objects, used = [], 0
+        for ref in primary:
+            text = json.dumps(self.objects[ref], ensure_ascii=False)
+            remaining = max(0, max_chars - used)
+            if not remaining:
+                break
+            limit = min(len(text), remaining)
+            primary_objects.append(dict(ref=ref, kind=self.kinds.get(ref), navigation=self.navigation(ref),
+                                        json_text=text[:limit], total_chars=len(text),
+                                        next_offset=limit if limit < len(text) else None))
+            used += limit
+
+        ordered_evidence = sorted(enumerate(self.evidence), key=lambda pair: (not related(pair[1]), pair[0]))
+        evidence = []
+        for _, row in ordered_evidence:
             view = {key: row.get(key) for key in ("evidence_id", "text", "locator", "object_id", "asset_refs")}
             size = len(json.dumps(view, ensure_ascii=False))
             if used + size <= max_chars:
                 evidence.append(view)
                 used += size
-        return dict(document=self.document, evidence=evidence, evidence_total=len(self.evidence),
+
+        catalog_rows = list(self.objects.items())
+        catalog_rows.sort(key=lambda pair: (pair[0] not in primary_set, self.kinds.get(pair[0], ""), pair[0]))
+        return dict(document=self.document, primary_objects=primary_objects,
+                    evidence=evidence, evidence_total=len(self.evidence),
                     evidence_omitted=len(self.evidence) - len(evidence),
                     repeated_native_ids=sorted(self.duplicate_ids),
                     catalog=[dict(ref=ref, kind=self.kinds[ref],
                                   title=row.get("section_title") or row.get("table_title") or row.get("block_type"),
                                   preview=str(row.get("source_text") or row.get("range_text") or "")[:160])
-                             for ref, row in self.objects.items() if self.kinds[ref] not in ("table_cells", "table_rows")],
+                             for ref, row in catalog_rows if self.kinds[ref] not in ("table_cells", "table_rows")],
                     images=[dict(ref=ref, asset_type=row.get("asset_type"), page_anchor=row.get("page_anchor"),
                                  cell_anchor=row.get("cell_anchor"), caption=row.get("caption"),
                                  nearby_text_before=str(row.get("nearby_text_before") or "")[:300],

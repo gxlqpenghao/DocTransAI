@@ -8,7 +8,8 @@ import sys
 
 @dataclass(frozen=True)
 class RuntimeConfig:
-    review_enabled: bool = True
+    # Independent semantic review is opt-in for ordinary v1 conversion.
+    review_enabled: bool = False
     review_max_steps: int = 6
     repair_max_steps: int = 4
     max_repair_rounds: int = 1
@@ -17,7 +18,7 @@ class RuntimeConfig:
     max_output_tokens: int = 5000
     initial_source_chars: int = 50000
     env_file: Path | None = None
-    model: str | None = None
+    model: str = "kimi-k3"
     render_script: Path | None = None
     render_python: str = sys.executable
     pdftoppm: str = "pdftoppm"
@@ -32,6 +33,8 @@ class RuntimeConfig:
         if min(self.review_max_steps, self.repair_max_steps, self.max_steps, self.max_seconds, self.max_output_tokens,
                self.initial_source_chars, self.render_timeout) <= 0:
             raise ValueError("Runtime budgets must be positive")
+        if self.model != "kimi-k3":
+            raise ValueError("The v1 document-tools path uses the fixed kimi-k3 model")
 
     @classmethod
     def from_environment(cls, **overrides):

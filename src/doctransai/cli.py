@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
         if command == "review":
             convert_parser.add_argument("--document", type=Path, required=True, help="Existing output; original template is still required")
         else:
+            convert_parser.add_argument("--review", action="store_true", help="Run the explicit independent review and bounded repair phase")
             convert_parser.add_argument("--skip-review", action="store_true", help="Explicit baseline comparison only; result is not independently reviewed")
         convert_parser.add_argument("--bundle", type=Path, required=True)
         convert_parser.add_argument("--template", type=Path, required=True)
@@ -27,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         convert_parser.add_argument("--document-id")
         convert_parser.add_argument("--source-ref", action="append", default=[])
         convert_parser.add_argument("--env-file", type=Path)
-        convert_parser.add_argument("--model")
+        convert_parser.add_argument("--model", help="Compatibility option; only kimi-k3 is supported")
         convert_parser.add_argument("--max-steps", type=int, default=12)
         convert_parser.add_argument("--review-max-steps", type=int, default=6)
         convert_parser.add_argument("--repair-max-steps", type=int, default=4)
@@ -45,8 +46,11 @@ def main(argv: list[str] | None = None) -> int:
         from doctransai.conversion import convert
         from doctransai.types import TaskSpec
         try:
+            explicit_review = args.command == "review" or bool(getattr(args, "review", False))
+            if explicit_review and getattr(args, "skip_review", False):
+                raise ValueError("--review and --skip-review cannot be used together")
             config = RuntimeConfig.from_environment(env_file=args.env_file, model=args.model,
-                    review_enabled=not getattr(args,"skip_review",False), review_max_steps=args.review_max_steps,
+                    review_enabled=explicit_review, review_max_steps=args.review_max_steps,
                     repair_max_steps=args.repair_max_steps, max_repair_rounds=args.max_repair_rounds,
                     max_steps=args.max_steps, max_seconds=args.timeout_seconds,
                     render_script=args.render_script, render_python=args.render_python)

@@ -23,6 +23,7 @@ def test_typed_values_literal_formula_and_merge_protection(tmp_path):
     e.apply(batch_id='a',version=0,edits=[dict(op='set_cells',target='s0!A2:D2',values=[[3,True,{'date':'2030-01-02'},'=1+1']])])
     s=load_workbook(e.output).active
     assert s['A2'].value==3 and s['B2'].value is True and isinstance(s['C2'].value,datetime)
+    assert s['C2'].number_format == 'yyyy-mm-dd'
     assert s['D2'].data_type=='s' and s['D2'].value=='=1+1'
     before=e.output.read_bytes()
     with pytest.raises(ValueError,match='top-left'):
@@ -101,6 +102,14 @@ def test_inspection_can_read_beyond_initial_window(tmp_path):
     assert result['nodes'][0]['value']=='later' and len(result['nodes'])==2
 
 
+def test_default_inspection_does_not_expand_blank_cells(tmp_path):
+    e=editor(tmp_path,lambda w:(setattr(w.active['A1'],'value','header'), setattr(w.active['A30'],'value','tail')))
+    result=e.inspect()
+    assert [node['id'] for node in result['nodes']] == ['s0!A1']
+    assert result['sheets'][0]['used_range'] == 'A1:A30'
+    assert result['sheets'][0]['default_view_note'].startswith('Only non-empty cells')
+
+
 def test_custom_xml_payload_and_relationship_survive_multiple_batches(tmp_path):
     from zipfile import ZipFile, ZIP_DEFLATED
     from lxml import etree
@@ -142,6 +151,12 @@ def test_horizontal_pagination_can_repeat_identity_columns(tmp_path):
     e.apply(batch_id='print',version=0,edits=[dict(op='set_print_area',target='s0!A1:Y8',repeat_rows='1:2',repeat_columns='A:B',fit_to_width=0)])
     s=load_workbook(e.output).active
     assert s.print_title_cols=='$A:$B' and s.print_title_rows=='$1:$2' and s.page_setup.fitToWidth==0
+
+
+def test_print_area_cannot_hide_existing_content(tmp_path):
+    e=editor(tmp_path,lambda w:(setattr(w.active['A1'],'value','keep'), setattr(w.active['C1'],'value','also keep')))
+    with pytest.raises(ValueError,match='hide existing content'):
+        e.apply(batch_id='print',version=0,edits=[dict(op='set_print_area',target='s0!A1:B1',source_refs=[],reason='too narrow')])
 
 
 def test_inspecting_empty_future_rows_does_not_expand_used_range(tmp_path):

@@ -4,7 +4,7 @@ DocTransAI is a template-driven document transformation project. It ingests stru
 
 The project keeps its runtime isolated from DataProxy. DataProxy v0 data-asset schemas are vendored as a local contract snapshot under `contracts/dataproxy/data_asset_pack_v0/`, and DocTransAI reads `parsed_document_bundle.json` through its own `doctransai.data_layer` package.
 
-## Document tools path — DOCX and XLSX
+## Document tools path — DOCX and XLSX (v1.0.0rc1 candidate)
 
 The new `convert` entrypoint uses native DataProxy evidence, a single model tool loop,
 and DOCX/XLSX editors. It does not use the legacy source model, slot analyzer, mapping
@@ -25,6 +25,13 @@ uv run doctransai convert \
   --instruction '依据该源材料填写模板；缺少依据的内容留空。' \
   --env-file /path/to/provider.env
 ```
+
+Ordinary conversion is the bounded editor flow: it prepares DataProxy
+materials, edits a copy, previews the real output pages, and returns a
+candidate. Independent semantic review is explicit: add `--review` to
+`convert`, or use the `review` command/API for an existing output. The
+compatibility flag `--skip-review` remains accepted and has the same baseline
+meaning as the default.
 
 Use a new output directory for each run. Choose a source with `--source-file` or
 `--document-id` when the bundle contains several documents. `--source-ref` can be
@@ -50,7 +57,7 @@ network access, credentials, or LibreOffice.
 
 ### Independent review and limited repair
 
-`convert` now runs independent review by default. The reviewer receives a fresh
+When explicitly requested, `convert` runs independent review. The reviewer receives a fresh
 context containing source materials, original template, current output and shared
 application requirements; it receives no editor assurance or previous review verdict.
 It has only read tools and `submit_review`. Findings include source/target roles and
@@ -88,9 +95,10 @@ The Python equivalent is `review_document(task, document, config=...)` in
 - `needs_review` means findings or uncertainty remain. `incomplete` means a phase
   did not complete, including budget exhaustion after a repair; it never inherits
   the previous editor or reviewer success.
-- `working.*` remains after an editing failure. `convert --skip-review` explicitly
-  retains the earlier comparison path, with `result.*` and `not_run`/`needs_review`;
-  those outputs are not independently reviewed.
+- `working.*` remains after an editing failure. Ordinary conversion and
+  `convert --skip-review` produce `result.*` and `not_run`/`needs_review`; those
+  outputs are not independently reviewed. `--review` and `review` produce
+  `candidate.*` and a review status.
 - `review.json` records all phases, coverage, findings, hashes, times and usage.
   `review-N.jsonl` and `repair-N.jsonl` retain separate tool traces without API keys
   or request-image base64. Unknown usage stays unknown. Acceptance metadata is
@@ -134,7 +142,9 @@ other sheets and images are retained by ordinary cell edits.
 Not yet supported: whole nested-table replacement,
 floating textboxes or resume after process restart. Existing run directories are refused; use a new run rather than replaying
 an old transcript implicitly. Structure reads are compact by default; selecting node
-IDs exposes run offsets/styles. Edits return only changed/new nodes and removed IDs.
+IDs exposes run offsets/styles. XLSX's default structure read lists used-range
+metadata and non-empty cells; an exact range is required when blank cells or
+their formatting matter. Edits return only changed/new nodes and removed IDs.
 Native material reads include explicit page/image navigation and paginated search.
 Long-template input paging and general history compaction
 remain later work; oversize requests fail explicitly instead of silently dropping images.

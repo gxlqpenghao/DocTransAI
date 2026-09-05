@@ -213,6 +213,12 @@ def test_review_budgets_cannot_be_unbounded(kwargs):
     with pytest.raises(ValueError):RuntimeConfig(**kwargs)
 
 
+def test_ordinary_runtime_defaults_to_no_independent_review():
+    config = RuntimeConfig()
+    assert config.review_enabled is False
+    assert config.model == 'kimi-k3'
+
+
 def test_adjacent_reviewed_cells_may_be_repaired_as_one_exact_union(tmp_path):
     from openpyxl import Workbook
     from doctransai.documents.xlsx import XlsxEditor
@@ -226,7 +232,7 @@ def test_adjacent_reviewed_cells_may_be_repaired_as_one_exact_union(tmp_path):
     assert e.book.active['C1'].value=='fixed'
 
 
-def test_default_conversion_runs_review_after_editor_finish(tmp_path,monkeypatch):
+def test_explicit_conversion_review_runs_after_editor_finish(tmp_path,monkeypatch):
     from doctransai.conversion import convert
     source,e,p,_=fixture(tmp_path)
     monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle',lambda _:source.corpus)
@@ -236,6 +242,7 @@ def test_default_conversion_runs_review_after_editor_finish(tmp_path,monkeypatch
         ('finish',dict(summary='EDITOR_CERTAINLY_APPROVED',checks=['seen'],issues=[],missing=[])),
         ('submit_review',finding()),
     ])
-    result=convert(TaskSpec(source.corpus.bundle_path,e.template,tmp_path/'convert-run','Fill'),client=client,previewer=p)
+    result=convert(TaskSpec(source.corpus.bundle_path,e.template,tmp_path/'convert-run','Fill'),
+                   config=RuntimeConfig(review_enabled=True), client=client,previewer=p)
     assert result.review_status=='model_passed' and Path(result.output_path).name=='candidate.docx'
     assert len(client.contexts)==4 and 'EDITOR_CERTAINLY_APPROVED' not in json.dumps(client.contexts[-1][0])

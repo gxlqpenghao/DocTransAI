@@ -136,6 +136,27 @@ class XlsxEditor:
     def _value(value):
         return value.isoformat() if isinstance(value, datetime) else value if isinstance(value, (str,int,float,bool,type(None))) else str(value)
 
+    @staticmethod
+    def _is_material_cell(cell):
+        return cell.value is not None or cell.data_type == 'f'
+
+    @classmethod
+    def _used_bounds(cls, ws):
+        """Find a non-destructive structural range from existing worksheet objects."""
+        coordinates = [(cell.row, cell.column) for cell in ws._cells.values() if cell.has_style or cls._is_material_cell(cell)]
+        for merged in ws.merged_cells.ranges:
+            coordinates.extend(((merged.min_row, merged.min_col), (merged.max_row, merged.max_col)))
+        for image in ws._images:
+            anchor = cls._image_cell(image)
+            if anchor:
+                cell = ws[anchor]
+                coordinates.append((cell.row, cell.column))
+        if not coordinates:
+            return (1, 1, 1, 1)
+        rows = [row for row, _ in coordinates]
+        columns = [column for _, column in coordinates]
+        return min(columns), min(rows), max(columns), max(rows)
+
     def inspect(self, *, detail=False, node_ids=None):
         sheets, nodes = [], []
         requested = {}
@@ -143,37 +164,51 @@ class XlsxEditor:
             ws, bounds = self.resolve(target)
             requested.setdefault(ws.title, []).append(bounds)
         for si, ws in enumerate(self.book):
+            used_a, used_b, used_c, used_d = self._used_bounds(ws)
+            material_count = sum(self._is_material_cell(cell) for cell in ws._cells.values())
             sheets.append(dict(id=f's{si}', name=ws.title, state=ws.sheet_state, rows=ws.max_row, columns=ws.max_column,
                 merged_ranges=[str(r) for r in ws.merged_cells.ranges], formulas=sum(c.data_type=='f' for c in ws._cells.values()),
                 images=[dict(anchor=self._image_cell(im), width=im.width, height=im.height) for im in ws._images],
                 print_area=str(ws.print_area), print_title_rows=ws.print_title_rows, print_title_columns=ws.print_title_cols, freeze_panes=str(ws.freeze_panes),
                 tables=list(ws.tables), validation_count=len(ws.data_validations.dataValidation),
-                conditional_formats=len(ws.conditional_formatting)))
-            ranges = requested.get(ws.title, []) if node_ids else [(1,1,min(ws.max_column,40),min(ws.max_row,20))]
+                conditional_formats=len(ws.conditional_formatting),
+                used_range=f'{get_column_letter(used_a)}{used_b}:{get_column_letter(used_c)}{used_d}',
+                non_empty_cells=material_count))
             if not node_ids:
-                sheets[-1]['default_view'] = f'A1:{get_column_letter(min(ws.max_column,40))}{min(ws.max_row,20)}'
-                sheets[-1]['view_truncated'] = ws.max_column>40 or ws.max_row>20
+                view_c, view_d = min(used_c, 40), min(used_d, 20)
+                sheets[-1]['default_view'] = f'A1:{get_column_letter(view_c)}{view_d}'
+                sheets[-1]['view_truncated'] = used_c > 40 or used_d > 20
+                sheets[-1]['default_view_note'] = 'Only non-empty cells and formulas are listed; use inspect_document with an exact range for blank cells and formatting.'
+                sheets[-1]['omitted_non_empty_cells'] = sum(self._is_material_cell(cell) and
+                    (cell.row > view_d or cell.column > view_c) for cell in ws._cells.values())
+                cell_iter = (cell for (row, column), cell in sorted(ws._cells.items())
+                             if row <= view_d and column <= view_c and self._is_material_cell(cell))
+                ranges = None
+            else:
+                ranges = requested.get(ws.title, [])
+                cell_iter = None
             seen=set()
-            for a,b,c,d in ranges:
-                for ri in range(b,d+1):
-                    for ci in range(a,c+1):
-                        cell = ws._cells.get((ri,ci))
-                        if cell is None:
-                            cell = Cell(ws,row=ri,column=ci)
-                        if cell.coordinate in seen: continue
-                        seen.add(cell.coordinate)
-                        key=f's{si}!{cell.coordinate}'
-                        merged=next((str(m) for m in ws.merged_cells.ranges if cell.coordinate in m), None)
-                        n=dict(id=key,kind='cell',data_type=cell.data_type,value_type=type(cell.value).__name__,text=str(self._value(cell.value) or ''),value=self._value(cell.value),
-                            formula=cell.value if cell.data_type=='f' else None, merged_range=merged,
-                            writable=not isinstance(cell,MergedCell) and cell.data_type!='f' and not ws.protection.sheet,
-                            number_format=cell.number_format)
-                        if detail:
-                            n.update(row_height=ws.row_dimensions.get(cell.row).height if ws.row_dimensions.get(cell.row) else None,
-                                column_width=self._column_width(ws, cell.column),
-                                wrap_text=cell.alignment.wrap_text,horizontal=cell.alignment.horizontal,
-                                font_size=cell.font.sz)
-                        nodes.append(n)
+            if cell_iter is None:
+                cell_iter = (ws._cells.get((ri, ci)) or Cell(ws, row=ri, column=ci)
+                             for a, b, c, d in ranges
+                             for ri in range(b, d + 1)
+                             for ci in range(a, c + 1))
+            for cell in cell_iter:
+                if cell.coordinate in seen:
+                    continue
+                seen.add(cell.coordinate)
+                key=f's{si}!{cell.coordinate}'
+                merged=next((str(m) for m in ws.merged_cells.ranges if cell.coordinate in m), None)
+                n=dict(id=key,kind='cell',data_type=cell.data_type,value_type=type(cell.value).__name__,text=str(self._value(cell.value) or ''),value=self._value(cell.value),
+                    formula=cell.value if cell.data_type=='f' else None, merged_range=merged,
+                    writable=not isinstance(cell,MergedCell) and cell.data_type!='f' and not ws.protection.sheet,
+                    number_format=cell.number_format)
+                if detail:
+                    n.update(row_height=ws.row_dimensions.get(cell.row).height if ws.row_dimensions.get(cell.row) else None,
+                        column_width=self._column_width(ws, cell.column),
+                        wrap_text=cell.alignment.wrap_text,horizontal=cell.alignment.horizontal,
+                        font_size=cell.font.sz)
+                nodes.append(n)
         self.nodes={n['id']:n for n in nodes}
         return dict(format='xlsx',version=self.version,sheets=sheets,nodes=nodes,
             image_count=sum(len(s._images) for s in self.book),supported_operations=self.operations,
@@ -209,9 +244,11 @@ class XlsxEditor:
             for ci,value in enumerate(row,a):
                 cell=ws.cell(ri,ci);self._editable(ws,cell)
                 if isinstance(value,dict):
-                    value=datetime.fromisoformat(value['date'])
+                    date_text = value['date']
+                    value=datetime.fromisoformat(date_text)
                     if value.tzinfo:raise ValueError('Excel dates must have no timezone')
-                    cell.number_format=edit.get('number_format', 'yyyy-mm-dd hh:mm')
+                    default_format = 'yyyy-mm-dd hh:mm' if 'T' in date_text or ' ' in date_text else 'yyyy-mm-dd'
+                    cell.number_format=edit.get('number_format', default_format)
                 if isinstance(value, str) and len(value) > 32767:
                     raise ValueError('Cell text exceeds Excel limit; summarize explicitly instead of truncating')
                 if isinstance(value, float) and not math.isfinite(value):
@@ -321,6 +358,13 @@ class XlsxEditor:
                     if 'column_width' in f:
                         for ci in range(a,c+1):ws.column_dimensions[get_column_letter(ci)].width=f['column_width']
                 elif op=='set_print_area':
+                    outside = [cell.coordinate for cell in ws._cells.values()
+                               if cell.value is not None and not (a <= cell.column <= c and b <= cell.row <= d)]
+                    outside_images = [self._image_cell(image) for image in ws._images
+                                      if self._image_cell(image) and not (a <= ws[self._image_cell(image)].column <= c and
+                                                                           b <= ws[self._image_cell(image)].row <= d)]
+                    if outside or outside_images:
+                        raise ValueError('print area cannot hide existing content or images')
                     ws.print_area=f'{get_column_letter(a)}{b}:{get_column_letter(c)}{d}'
                     if 'orientation' in edit:ws.page_setup.orientation=edit['orientation']
                     if 'fit_to_width' in edit:

@@ -44,6 +44,15 @@ def test_native_context_refs_and_asset_path_are_retained(tmp_path):
         view.check_refs(["other-doc-ref"])
 
 
+def test_primary_source_refs_are_first_class_initial_context(tmp_path):
+    corpus, _, _ = material(tmp_path)
+    view = SourceView(corpus)
+    initial = view.initial(10000, primary_refs=['row1'])
+    assert initial['primary_objects'][0]['ref'] == 'row1'
+    assert initial['primary_objects'][0]['kind'] == 'table_rows'
+    assert initial['evidence'][0]['evidence_id'] == 'ev1'
+
+
 def test_source_document_selection_is_not_implicit_for_multiple_documents(tmp_path):
     corpus, _, _ = material(tmp_path)
     corpus.documents.append(dict(document_id="doc2", source_path="/other.docx"))
@@ -120,6 +129,16 @@ def test_finish_requires_all_pages_and_a_later_model_round(tmp_path):
     runtime.invoke("edit_document", dict(batch_id="edit", version=0, edits=[dict(op="set_text", target="n0", text="", source_refs=[], reason="clear")]))
     with pytest.raises(ValueError, match="current"):
         runtime.invoke("finish", finish)
+
+
+def test_finish_accepts_minimal_delivery_contract(tmp_path):
+    corpus, template, image = material(tmp_path)
+    runtime = ToolRuntime(SourceView(corpus), DocxEditor(template, tmp_path / 'working.docx', SourceView(corpus).asset_path), FakePreview(image))
+    runtime.round = 1
+    runtime.invoke('preview_document', {})
+    runtime.round = 2
+    runtime.invoke('finish', {'summary': 'delivered'})
+    assert runtime.finished == {'summary': 'delivered', 'issues': [], 'missing': []}
 
 
 def test_invalid_reference_is_rejected_before_any_edit(tmp_path):

@@ -65,28 +65,31 @@ TOOLS = [
          obj(dict(batch_id=ID, version={"type": "integer", "minimum": 0}, edits=EDITS), ["batch_id", "version", "edits"])),
     tool("preview_document", "View output (default) or original template pages. Inspect ALL current output pages (use next_page). After edits, previous output preview is stale. Template viewing does not count as output review. Finish in a later model response after seeing all output pages.",
          obj(dict(target={"enum": ["output", "template"]}, start_page={"type": "integer", "minimum": 1}, max_pages={"type": "integer", "minimum": 1, "maximum": 4}))),
-    tool("finish", "Declare completion after visual inspection. Issues and missing facts must be honest; this is an editor self-check, not independent semantic validation.",
-         obj(dict(summary=TEXT, checks={"type": "array", "items": TEXT, "minItems": 1},
+    tool("finish", "Declare the deliverable after viewing the current output pages. Provide a short summary and only unresolved issues or missing facts. This is an editor self-check, not independent semantic validation. The legacy checks field is optional and may be a string or list.",
+         obj(dict(summary=TEXT,
+                  checks={"oneOf": [TEXT, {"type": "array", "items": TEXT}]},
                   issues={"type": "array", "items": TEXT},
                   missing={"type": "array", "items": obj(dict(target=TEXT, kind={"enum": ["source_missing", "manual", "ambiguous", "unsupported"]}, message=TEXT), ["target", "kind", "message"])}),
-             ["summary", "checks", "issues", "missing"])),
+             ["summary"])),
 ]
 XLSX_VALUE = {"oneOf": [{"type": ["string", "number", "boolean", "null"]}, obj(dict(date=TEXT), ["date"])]}
+XLSX_TARGET = {"type": "string", "pattern": r"^s[0-9]+![A-Z]+[1-9][0-9]*(?::[A-Z]+[1-9][0-9]*)?$"}
+XLSX_BASE = {**BASE, "target": XLSX_TARGET}
 XLSX_EDITS = {"type": "array", "minItems": 1, "maxItems": 40, "items": {"oneOf": [
-    obj(dict(BASE, op={"const": "set_cells"}, values={"type": "array", "minItems": 1, "maxItems": 100,
+    obj(dict(XLSX_BASE, op={"const": "set_cells"}, values={"type": "array", "minItems": 1, "maxItems": 100,
         "items": {"type": "array", "items": XLSX_VALUE, "minItems": 1, "maxItems": 100}}, number_format=TEXT),
         ["op", "target", "values", "source_refs", "reason"]),
-    obj(dict(BASE, op={"const": "set_formula"}, formula=TEXT, expected_formula={"type": ["string", "null"]}),
+    obj(dict(XLSX_BASE, op={"const": "set_formula"}, formula=TEXT, expected_formula={"type": ["string", "null"]}),
         ["op", "target", "formula", "expected_formula", "source_refs", "reason"]),
-    obj(dict(BASE, op={"const": "copy_rows"}, destination_rows={"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1, "maxItems": 100, "uniqueItems": True}),
+    obj(dict(XLSX_BASE, op={"const": "copy_rows"}, destination_rows={"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1, "maxItems": 100, "uniqueItems": True}),
         ["op", "target", "destination_rows", "source_refs", "reason"]),
-    obj(dict(BASE, op={"const": "set_cell_images"}, asset_ids={**REFS, "maxItems": 12}), ["op", "target", "asset_ids", "source_refs", "reason"]),
-    obj(dict(BASE, op={"const": "format_cells"}, format={**obj(dict(wrap_text={"type": "boolean"},
+    obj(dict(XLSX_BASE, op={"const": "set_cell_images"}, asset_ids={**REFS, "maxItems": 12}), ["op", "target", "asset_ids", "source_refs", "reason"]),
+    obj(dict(XLSX_BASE, op={"const": "format_cells"}, format={**obj(dict(wrap_text={"type": "boolean"},
         horizontal={"enum": ["left", "center", "right", "general", "justify"]}, vertical={"enum": ["top", "center", "bottom"]},
         row_height={"type": "number", "minimum": 1, "maximum": 409}, column_width={"type": "number", "minimum": 1, "maximum": 255},
         font_size={"type": "number", "minimum": 6, "maximum": 72}, number_format=TEXT)), "minProperties": 1}),
         ["op", "target", "format", "source_refs", "reason"]),
-    obj(dict(BASE, op={"const": "set_print_area"}, orientation={"enum": ["portrait", "landscape"]},
+    obj(dict(XLSX_BASE, op={"const": "set_print_area"}, orientation={"enum": ["portrait", "landscape"]},
         fit_to_width={"type": "integer", "minimum": 0, "maximum": 10}, repeat_rows={"type": "string", "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"}, repeat_columns={"type": "string", "pattern": "^[A-Z]+:[A-Z]+$"}),
         ["op", "target", "source_refs", "reason"]),
 ]}}
@@ -98,7 +101,7 @@ def tools_for_format(format_key):
     from copy import deepcopy
     result = deepcopy(TOOLS)
     inspect = next(t["function"] for t in result if t["function"]["name"] == "inspect_document")
-    inspect["description"] = "Inspect sheets, formulas, merged cells, image anchors and print settings. Default view is bounded to 20 rows/40 columns per sheet. node_ids may contain exact ranges like s0!A21:Y40 to read later rows or details. s0 indexes the first sheet regardless of its name. Blank cells outside the initial view are addressable."
+    inspect["description"] = "Inspect sheets, formulas, merged cells, image anchors and print settings. The default view reports each sheet's used range and non-empty cells only; it does not expand every blank cell. node_ids may contain exact ranges like s0!A21:Y40 to read complete cells, blank areas and formatting. s0 indexes the first sheet regardless of its name."
     edit = next(t["function"] for t in result if t["function"]["name"] == "edit_document")
     edit["parameters"]["properties"]["edits"] = XLSX_EDITS
     edit["description"] = "Atomic versioned XLSX batch; targets use s0!A3 or s0!A3:Y5. set_cells writes an exactly shaped matrix: numbers/bools stay typed; {date: ISO} creates Excel dates; null clears; strings starting '=' remain literal. Existing formulas are protected. set_formula requires expected_formula (null for a new formula). copy_rows copies the given row/column block to empty destination start rows, translating relative formulas and preserving styles/complete merges; never inserts or shifts other rows. Copy before filling facts/images, then populate each new record separately. set_cell_images replaces images anchored at one cell; [] removes example images. Size rows/columns BEFORE images to fit them. format_cells changes explicit formatting. set_print_area sets the exact populated print range, orientation, repeat_rows such as 1:2, repeat_columns such as A:B for record identity across horizontal pages, and optional fit_to_width (0 preserves readable scale across pages). Do not squash many columns to an unreadable single page. Formatting, clearing values/images and copying templates need no invented fact refs; new facts need refs."
@@ -218,6 +221,9 @@ class ToolRuntime:
                 raise ValueError("Inspect a current output preview in an earlier model round before finishing")
             if self.coverage != set(range(1, len(self.output_pages) + 1)):
                 raise ValueError(f"Not all current output pages were delivered; missing pages: {sorted(set(range(1, len(self.output_pages) + 1)) - self.coverage)}. Request them before finish.")
-            self.finished = args
+            # Keep completion small. ``checks`` remains accepted for old
+            # callers, but is optional and is not treated as proof.
+            self.finished = dict(summary=args["summary"], issues=list(args.get("issues", [])),
+                                 missing=list(args.get("missing", [])))
             return {"finished": True}, []
         raise AssertionError(name)
