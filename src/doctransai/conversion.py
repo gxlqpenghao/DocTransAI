@@ -65,24 +65,68 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         source.check_refs(task.source_refs)
         editor = (XlsxEditor if suffix == ".xlsx" else DocxEditor)(existing_document or task.template_path, output_dir / ("working" + suffix), source.asset_path)
         editor.reference_template = task.template_path.resolve()
+        reference_editor_for_snapshot = editor
         if existing_document is not None:
             with tempfile.TemporaryDirectory() as tmp:
                 reference_editor = (XlsxEditor if suffix == ".xlsx" else DocxEditor)(task.template_path, Path(tmp) / ("reference" + suffix), source.asset_path)
+                reference_editor_for_snapshot = reference_editor
                 reference_snapshot = reference_editor.inspect()
         else:
             reference_snapshot = editor.inspect()
+        if suffix == ".xlsx":
+            # The compact XLSX view is useful after edits, but the first model
+            # request should not spend a turn discovering the exact template
+            # range and blank writable cells.
+            ranges = [f"{sheet['id']}!{sheet['used_range']}" for sheet in reference_snapshot["sheets"]]
+            reference_snapshot = reference_editor_for_snapshot.inspect(node_ids=ranges)
+            if task.source_refs:
+                reference_snapshot["v1_template_contract"] = (
+                    "When the task declares a selected source record, populated rows in the target workbook are "
+                    "template examples unless the instruction explicitly says to retain them. For a single-record "
+                    "output, keep the header and row formatting, use one compatible record row for the selected "
+                    "record, and clear unrelated example values and images. Do not treat example facts as source evidence."
+                )
         previewer = previewer or Previewer(output_dir / "previews", config, deadline=deadline)
         if progress:
             progress("生成模板预览" if existing_document is None else "准备原模板对照信息")
         template_pages = previewer.render(task.template_path) if existing_document is None else []
+        prep_started = time.monotonic()
+        initial_source = source.initial(config.initial_source_chars, primary_refs=task.source_refs)
+        prepared_asset_refs = source.initial_asset_refs(task.source_refs, max_assets=config.initial_source_assets)
+        initial_source["prepared_asset_refs"] = prepared_asset_refs
+        initial_source["prepared_asset_count"] = len(prepared_asset_refs)
+        initial_source["prepared_asset_note"] = "These native source images are attached below; unlisted assets remain available through view_source_asset."
+        source_page_paths = []
+        if source.source_file.suffix.lower() in (".doc", ".docx", ".pdf") and source.source_file.stat().st_size <= config.initial_source_max_bytes:
+            expected = source.document.get("source_checksum")
+            if expected and hashlib.sha256(source.source_file.read_bytes()).hexdigest() != expected:
+                raise ValueError("Source file changed since DataProxy parsing; cannot prepare matching source pages")
+            rendered_source_pages = previewer.render(source.source_file)
+            if len(rendered_source_pages) <= config.initial_source_pages:
+                source_page_paths = rendered_source_pages
+            else:
+                initial_source["source_pages_omitted"] = len(rendered_source_pages) - config.initial_source_pages
+                source_page_paths = rendered_source_pages[:config.initial_source_pages]
+        initial_source["prepared_source_page_count"] = len(source_page_paths)
         initial = dict(instruction=task.instruction, primary_source_refs=list(task.source_refs),
-                       source=source.initial(config.initial_source_chars, primary_refs=task.source_refs), document=reference_snapshot)
+                       source=initial_source, document=reference_snapshot)
         (output_dir / "input.json").write_text(json.dumps(initial, ensure_ascii=False, indent=2))
         parts = [{"type": "text", "text": json.dumps(initial, ensure_ascii=False)}]
+        prepared_source_image_paths = []
+        for number, path in enumerate(source_page_paths, 1):
+            parts += [{"type": "text", "text": f"Prepared source page {number}/{len(source_page_paths)}"}, image_part(path)]
+        for ref in prepared_asset_refs:
+            path = source.asset_path(ref)
+            prepared_source_image_paths.append((ref, path))
+            parts += [{"type": "text", "text": f"Prepared source asset {ref}"}, image_part(path)]
         for number, path in enumerate(template_pages, 1):
             parts += [{"type": "text", "text": f"Template page {number}/{len(template_pages)}"}, image_part(path)]
+        append_event(trace_path, dict(kind="prepare", elapsed_seconds=round(time.monotonic() - prep_started, 3),
+                                     source_page_count=len(source_page_paths), source_asset_count=len(prepared_asset_refs),
+                                     template_page_count=len(template_pages), template_format=suffix[1:]))
         messages = [dict(role="system", content=prompt), dict(role="user", content=parts)]
         runtime = ToolRuntime(source, editor, previewer)
+        runtime.prepared_source_images = prepared_source_image_paths
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
                 model_name=config.model, max_tokens=config.max_output_tokens))
         report["model"] = getattr(client, "model_name", config.model)
@@ -158,11 +202,26 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                       structural_check="not_completed")
     events = [json.loads(line) for log in sorted(output_dir.glob("*.jsonl")) for line in log.read_text().splitlines()]
     requests = [e for e in events if e.get("kind") in ("model", "model_error")]
+    model_events = [e for e in events if e.get("kind") == "model"]
+    usage_events = [e.get("usage") for e in model_events if isinstance(e.get("usage"), dict)]
+    usage_detail = [u.get("completion_tokens_details", {}) for u in usage_events]
+    prompt_detail = [u.get("prompt_tokens_details", {}) for u in usage_events]
     report.update(asdict(result), elapsed_seconds=round(time.monotonic() - started, 3),
                   model_request_count=len(requests),
                   model_request_seconds=sum(e.get("elapsed_seconds", 0) for e in requests),
                   unknown_usage_requests=sum(e.get("usage") is None for e in requests),
-                  completed_tool_calls=sum(e.get("kind") == "tool" and e.get("success") is True for e in events))
+                  completed_tool_calls=sum(e.get("kind") == "tool" and e.get("success") is True for e in events),
+                  tool_seconds=round(sum(e.get("elapsed_seconds", 0) for e in events if e.get("kind") == "tool"), 3),
+                  render_seconds=round(sum(e.get("elapsed_seconds", 0) for e in events if e.get("kind") == "auto_preview"), 3),
+                  prepare_seconds=round(sum(e.get("elapsed_seconds", 0) for e in events if e.get("kind") == "prepare"), 3),
+                  auto_preview_count=sum(e.get("kind") == "auto_preview" for e in events),
+                  input_image_count=sum(e.get("input_image_count", 0) for e in model_events),
+                  input_image_chars=sum(e.get("input_image_chars", 0) for e in model_events),
+                  prompt_tokens=sum(u.get("prompt_tokens", 0) or 0 for u in usage_events),
+                  output_tokens=sum(u.get("completion_tokens", 0) or 0 for u in usage_events),
+                  total_tokens=sum(u.get("total_tokens", 0) or 0 for u in usage_events),
+                  thinking_tokens=sum(d.get("reasoning_tokens", 0) or 0 for d in usage_detail),
+                  image_tokens=sum(d.get("image_tokens", 0) or 0 for d in prompt_detail))
     report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
     return result
 

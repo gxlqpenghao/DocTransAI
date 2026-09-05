@@ -111,6 +111,16 @@ class FakePreview:
         return [self.image] * self.count
 
 
+class RecordingPreview(FakePreview):
+    def __init__(self, image, count=1):
+        super().__init__(image, count)
+        self.calls = []
+
+    def render(self, path, **kwargs):
+        self.calls.append((path, kwargs))
+        return super().render(path, **kwargs)
+
+
 def test_finish_requires_all_pages_and_a_later_model_round(tmp_path):
     corpus, template, image = material(tmp_path)
     view = SourceView(corpus)
@@ -207,13 +217,51 @@ def test_conversion_uses_new_tools_and_publishes_only_after_finish(tmp_path, mon
     assert result.execution_status == "completed", result.issues
     assert result.review_status == "not_run"  # no independent semantic reviewer yet
     assert client.saw_output_image
-    assert client.review_image_count == 1  # old template image is not resent
+    assert client.review_image_count == 2  # prepared source asset + current output page; old template page is not resent
     assert Document(result.output_path).paragraphs[0].text == "Example project"
     report = json.loads(Path(result.report_path).read_text())
     assert report["delivered_output_pages"] == [1]
     assert report["editor_self_check_completed"]
     assert report["template_unchanged"]
     assert not (task.output_dir / "working.docx").exists()
+
+
+def test_successful_edit_is_automatically_previewed_before_finish(tmp_path, monkeypatch):
+    corpus, template, image = material(tmp_path)
+    monkeypatch.setattr("doctransai.conversion.read_parsed_document_bundle", lambda _: corpus)
+    preview = RecordingPreview(image)
+
+    class AutoClient:
+        model_name = "test-client"
+
+        def __init__(self):
+            self.index = 0
+            self.seen_result_check = False
+
+        def chat(self, messages, tools, **kwargs):
+            if self.index == 1:
+                parts = messages[-1]["content"]
+                text = parts[0]["text"]
+                self.seen_result_check = ("程序已经对当前版本真实渲染" in text and
+                                          any("Current output page" in part.get("text", "") for part in parts if isinstance(part, dict)))
+            calls = [
+                ("edit_document", dict(batch_id="auto", version=0, edits=[dict(
+                    op="set_text", target="n0", text="Example project", source_refs=["ev1"], reason="native fact")])),
+                ("finish", dict(summary="delivered", missing=[], issues=[])),
+            ]
+            name, args = calls[self.index]
+            self.index += 1
+            return dict(message=dict(role="assistant", content="", tool_calls=[dict(
+                id=str(self.index), type="function", function=dict(name=name, arguments=json.dumps(args)))]),
+                        usage=None, model=self.model_name)
+
+    client = AutoClient()
+    result = convert(TaskSpec(corpus.bundle_path, template, tmp_path / "auto-run", "Fill"),
+                     config=RuntimeConfig(review_enabled=False), client=client, previewer=preview)
+    assert result.execution_status == "completed", result.issues
+    assert client.index == 2 and client.seen_result_check
+    assert len(preview.calls) == 3  # source prep + template prep + automatic current-output render
+    assert json.loads(Path(result.report_path).read_text())["auto_preview_count"] == 1
 
 
 def test_budget_exhaustion_retains_draft_but_never_publishes_success(tmp_path, monkeypatch):

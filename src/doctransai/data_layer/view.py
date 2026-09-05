@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from doctransai.data_layer.models import SourceCorpus
@@ -141,6 +142,62 @@ class SourceView:
             objects.append(dict(ref=ref, navigation=self.navigation(ref), json_text=text[offset:offset + max_chars], total_chars=len(text),
                                 next_offset=offset + max_chars if offset + max_chars < len(text) else None))
         return dict(objects=objects)
+
+    @staticmethod
+    def _range_rows(value: object) -> set[int]:
+        rows: set[int] = set()
+        for match in re.finditer(r"\b[A-Z]{1,3}(\d+)(?::[A-Z]{1,3}(\d+))?\b", str(value or "")):
+            first, last = int(match.group(1)), int(match.group(2) or match.group(1))
+            rows.update(range(min(first, last), max(first, last) + 1))
+        return rows
+
+    def initial_asset_refs(self, primary_refs: list[str] | tuple[str, ...] = (), *, max_assets: int = 12) -> list[str]:
+        """Select native source images for the first context using explicit anchors.
+
+        This is an input-preparation index, not a semantic image mapper. Direct
+        native refs win; spreadsheet ranges can additionally select images whose
+        native cell anchor is in the same row. Remaining images stay available
+        through ``view_source_asset``.
+        """
+        self.check_refs(primary_refs)
+        selected: list[str] = []
+        primary_rows: set[int] = set()
+
+        def visit(value):
+            nonlocal primary_rows
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key in ("cell_range", "range", "range_text", "cell_anchor"):
+                        primary_rows.update(self._range_rows(child))
+                    if key == "asset_refs" and isinstance(child, list):
+                        for ref in child:
+                            if ref in self.assets and ref not in selected:
+                                selected.append(ref)
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        for ref in primary_refs:
+            visit(self.objects[ref])
+
+        if primary_rows:
+            for ref, row in self.assets.items():
+                anchor = row.get("cell_anchor")
+                if anchor and self._range_rows(anchor) & primary_rows and ref not in selected:
+                    selected.append(ref)
+
+        if not primary_refs and len(self.assets) <= max_assets:
+            selected.extend(ref for ref in self.assets if ref not in selected)
+        elif len(selected) < max_assets:
+            # A short source with no explicit asset refs should still expose
+            # its complete native image set; large sets remain on-demand.
+            for ref in self.assets:
+                if ref not in selected:
+                    selected.append(ref)
+                if len(selected) >= max_assets:
+                    break
+        return selected[:max_assets]
 
     def initial(self, max_chars: int, *, primary_refs: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
         """Build the first model context without creating a second source model.

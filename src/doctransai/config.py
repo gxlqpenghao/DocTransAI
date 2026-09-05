@@ -17,6 +17,10 @@ class RuntimeConfig:
     max_seconds: float = 900
     max_output_tokens: int = 5000
     initial_source_chars: int = 50000
+    initial_source_pages: int = 6
+    initial_source_assets: int = 12
+    initial_source_max_bytes: int = 8_000_000
+    auto_preview_max_pages: int = 8
     env_file: Path | None = None
     model: str = "kimi-k3"
     render_script: Path | None = None
@@ -26,12 +30,13 @@ class RuntimeConfig:
     render_revision: str = "1"
 
     def __post_init__(self):
-        if not all(math.isfinite(x) for x in (self.max_seconds, self.max_steps, self.review_max_steps, self.repair_max_steps, self.render_timeout, self.max_output_tokens, self.initial_source_chars)):
+        if not all(math.isfinite(x) for x in (self.max_seconds, self.max_steps, self.review_max_steps, self.repair_max_steps, self.render_timeout, self.max_output_tokens, self.initial_source_chars, self.initial_source_pages, self.initial_source_assets, self.initial_source_max_bytes, self.auto_preview_max_pages)):
             raise ValueError("Runtime budgets must be finite")
         if not 0 <= self.max_repair_rounds <= 2:
             raise ValueError("max_repair_rounds must be between 0 and 2")
         if min(self.review_max_steps, self.repair_max_steps, self.max_steps, self.max_seconds, self.max_output_tokens,
-               self.initial_source_chars, self.render_timeout) <= 0:
+               self.initial_source_chars, self.initial_source_pages, self.initial_source_assets,
+               self.initial_source_max_bytes, self.auto_preview_max_pages, self.render_timeout) <= 0:
             raise ValueError("Runtime budgets must be positive")
         if self.model != "kimi-k3":
             raise ValueError("The v1 document-tools path uses the fixed kimi-k3 model")

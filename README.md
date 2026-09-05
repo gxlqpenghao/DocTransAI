@@ -31,8 +31,8 @@ uv run doctransai convert \
 ```
 
 Ordinary conversion is the bounded editor flow: it prepares DataProxy
-materials, edits a copy, previews the real output pages, and returns a
-candidate. Independent semantic review is explicit: add `--review` to
+materials and short-source visual context, submits edits, then automatically
+renders the real current output before the next model check. Independent semantic review is explicit: add `--review` to
 `convert`, or use the `review` command/API for an existing output. The
 compatibility flag `--skip-review` remains accepted and has the same baseline
 meaning as the default.
@@ -152,6 +152,12 @@ their formatting matter. Edits return only changed/new nodes and removed IDs.
 Native material reads include explicit page/image navigation and paginated search.
 Long-template input paging and general history compaction
 remain later work; oversize requests fail explicitly instead of silently dropping images.
+
+For short DOC/DOCX/PDF sources, the initial context includes up to six rendered
+source pages and up to twelve relevant native source images. Larger sources keep
+on-demand page reads. After a successful edit, the program renders the current
+output automatically; the model only needs `preview_document` for missing pages,
+template inspection, or a deliberate follow-up check.
 
 On this macOS workstation use the Codex bundled renderer, not the broken Homebrew
 `soffice` entrypoint. Check the existing CJK font fix after runtime upgrades.
