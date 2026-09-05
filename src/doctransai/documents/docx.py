@@ -14,7 +14,10 @@ import zipfile
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.table import _Row
 from docx.shared import Inches, Pt
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
@@ -46,9 +49,10 @@ class DocxEditor:
             element = parent
         return str(node.part.partname), tuple(reversed(indexes))
 
-    def inspect(self, *, _restore_ids=None) -> dict:
+    def inspect(self, *, _restore_ids=None, detail=False) -> dict:
         known = {id(node._element): key for key, node in self.nodes.items()}
         entries = []
+        live = {}
 
         def add(node, where, kind):
             key = known.get(id(node._element))
@@ -57,23 +61,46 @@ class DocxEditor:
             if key is None:
                 key = f"n{self.next_id}"
                 self.next_id += 1
-            self.nodes[key] = node
+            live[key] = node
             known[id(node._element)] = key
-            entries.append(dict(id=key, kind=kind, where=where, text=node.text,
-                                char_count=len(node.text), nested_tables=bool(getattr(node, "tables", [])),
+            text = node.text if hasattr(node, "text") else "\t".join(c.text for c in node.cells)
+            entries.append(dict(id=key, kind=kind, where=where, text=text,
+                                char_count=len(text), nested_tables=bool(getattr(node, "tables", [])),
                                 body_index=node._element.getparent().index(node._element)
                                 if node._element.getparent() is self.doc._element.body else None))
+            if isinstance(node, Paragraph):
+                entries[-1].update(self.paragraph_details(node) if detail else dict(
+                    paragraph_style=node.style.name if node.style else None, run_count=len(node.runs)))
+            return key
 
         for i, p in enumerate(self.doc.paragraphs):
             add(p, f"body paragraph {i}", "paragraph")
-        for ti, table in enumerate(self.doc.tables):
-            seen = set()
-            for ri, row in enumerate(table.rows):
-                for ci, cell in enumerate(row.cells):
-                    if cell._tc in seen:
-                        continue
-                    seen.add(cell._tc)
-                    add(cell, f"table {ti} row {ri} column {ci}", "cell")
+        def add_tables(tables, prefix):
+            for ti, table in enumerate(tables):
+                seen = set()
+                for ri, row in enumerate(table.rows):
+                    where = f"{prefix}table {ti} row {ri}"
+                    row_id = add(row, where, "row")
+                    row_entry = entries[-1]
+                    row_entry.update(height_pt=row.height.pt if row.height else None,
+                                     height_rule=str(row.height_rule) if row.height_rule is not None else "inherited",
+                                     cant_split=any(x.get(qn("w:val"), "1") not in ("0", "false", "off")
+                                                    for x in row._tr.xpath("./w:trPr/w:cantSplit")))
+                    row_entry["physical_cells"] = [dict(grid_span=tc.grid_span, vertical_merge=tc.vMerge)
+                                                   for tc in row._tr.tc_lst]
+                    row_entry["content_cell_ids"] = []
+                    for ci, cell in enumerate(row.cells):
+                        if cell._tc in seen:
+                            continue
+                        seen.add(cell._tc)
+                        cell_id = add(cell, f"{where} column {ci}", "cell")
+                        row_entry["content_cell_ids"].append(cell_id)
+                        entries[-1].update(row_id=row_id, grid_span=cell._tc.grid_span)
+                        for pi, paragraph in enumerate(cell.paragraphs):
+                            add(paragraph, f"cell {cell_id} paragraph {pi}", "paragraph")
+                            entries[-1]["cell_id"] = cell_id
+                        add_tables(cell.tables, f"cell {cell_id} ")
+        add_tables(self.doc.tables, "")
         for si, section in enumerate(self.doc.sections):
             for name in ("header", "footer", "first_page_header", "first_page_footer", "even_page_header", "even_page_footer"):
                 part = getattr(section, name)
@@ -81,9 +108,128 @@ class DocxEditor:
                     continue
                 for pi, p in enumerate(part.paragraphs):
                     add(p, f"section {si} {name} paragraph {pi}", "paragraph")
+                add_tables(part.tables, f"section {si} {name} ")
+        self.nodes = live
         return dict(version=self.version, nodes=entries, image_count=len(self.doc.inline_shapes),
-                    supported_operations=["set_text", "replace_text", "set_images", "repeat_paragraphs", "format_paragraph"],
-                    limitations=["No nested-table replacement, floating textbox editing or table-row cloning in this stage"])
+                    supported_operations=["set_text", "replace_text", "replace_range", "set_images", "repeat_paragraphs", "repeat_rows", "set_list", "format_row", "format_paragraph"],
+                    limitations=["No nested-table replacement or floating textbox editing; repeat_rows requires a complete vertical-merge group"])
+
+    @staticmethod
+    def clone_structure(element):
+        if element.xpath(".//w:sectPr | .//w:bookmarkStart | .//w:bookmarkEnd | .//w:commentRangeStart | .//w:commentRangeEnd"):
+            raise ValueError("Cannot clone section boundaries, bookmarks or comments")
+        clone = copy.deepcopy(element)
+        # These editing-session identities must not be duplicated across clones.
+        for child in clone.iter():
+            for name in ("{http://schemas.microsoft.com/office/word/2010/wordml}paraId",
+                         "{http://schemas.microsoft.com/office/word/2010/wordml}textId"):
+                child.attrib.pop(name, None)
+        return clone
+
+    @staticmethod
+    def paragraph_details(p):
+        runs, offset = [], 0
+        for index, run in enumerate(p.runs):
+            runs.append(dict(index=index, start=offset, end=offset + len(run.text), text=run.text,
+                             bold=run.bold, italic=run.italic, underline=str(run.underline) if run.underline is not None else None,
+                             hidden=run.font.hidden, color=str(run.font.color.rgb) if run.font.color.rgb else None,
+                             size_pt=run.font.size.pt if run.font.size else None))
+            offset += len(run.text)
+        num = p._p.xpath("./w:pPr/w:numPr")
+        return dict(runs=runs, paragraph_style=p.style.name if p.style else None,
+                    numbering_xml=num[0].xml if num else None,
+                    range_unit="Python Unicode code points; end exclusive; offsets require current version",
+                    protected=bool(p._p.xpath(".//w:drawing | .//w:pict | .//w:fldChar | .//w:fldSimple | .//w:hyperlink | .//w:sdt")))
+
+    def set_list(self, node, items, style, start):
+        if style not in ("decimal", "bullet") or not items:
+            raise ValueError("set_list needs items and decimal/bullet style")
+        paragraphs = self.paragraphs(node)
+        for p in paragraphs:
+            self.guard_text(p)
+        prototype = paragraphs[0]
+        # A new numbering instance isolates this list from every other list.
+        numbering = self.doc.part.numbering_part.element
+        abstract_id = max([int(x.get(qn("w:abstractNumId"))) for x in numbering.findall(qn("w:abstractNum"))] + [-1]) + 1
+        abstract = OxmlElement("w:abstractNum")
+        abstract.set(qn("w:abstractNumId"), str(abstract_id))
+        lvl = OxmlElement("w:lvl"); lvl.set(qn("w:ilvl"), "0")
+        for tag, value in (("start", str(start)), ("numFmt", style), ("lvlText", "%1." if style == "decimal" else "•"), ("suff", "tab")):
+            child = OxmlElement("w:" + tag); child.set(qn("w:val"), value); lvl.append(child)
+        props = OxmlElement("w:pPr")
+        indent = OxmlElement("w:ind"); indent.set(qn("w:left"), "360"); indent.set(qn("w:hanging"), "360")
+        props.append(indent); lvl.append(props); abstract.append(lvl)
+        first_num = numbering.find(qn("w:num"))
+        if first_num is None:
+            numbering.append(abstract)
+        else:
+            first_num.addprevious(abstract)
+        num = numbering.add_num(abstract_id)
+        anchor = prototype._p
+        for text in items:
+            element = self.clone_structure(prototype._p)
+            anchor.addnext(element); anchor = element
+            p = Paragraph(element, prototype._parent)
+            self.put_text(p, text)
+            pr = p._p.get_or_add_pPr().get_or_add_numPr()
+            pr.get_or_add_ilvl().val = 0
+            pr.get_or_add_numId().val = num.numId
+            p.paragraph_format.keep_with_next = False
+        for p in paragraphs:
+            p._p.getparent().remove(p._p)
+        self.touched_parts.add("word/numbering.xml")
+
+    def repeat_rows(self, edit):
+        ids = edit["targets"]
+        rows = [self.nodes[x] for x in ids]
+        if not rows or len(set(ids)) != len(ids) or any(not isinstance(r, _Row) for r in rows):
+            raise ValueError("repeat_rows requires distinct row IDs")
+        if any(a._tr.getnext() is not b._tr for a, b in zip(rows, rows[1:])):
+            raise ValueError("Repeated rows must be consecutive")
+        # Vertical merges may only be copied when their entire group is selected.
+        if any(tc.vMerge == "continue" for tc in rows[0]._tr.tc_lst):
+            raise ValueError("Selection starts inside a vertical merge")
+        following = rows[-1]._tr.getnext()
+        if following is not None and following.tag == qn("w:tr") and any(tc.vMerge == "continue" for tc in following.tc_lst):
+            raise ValueError("Selection ends inside a vertical merge")
+        prototypes = []
+        for row in rows:
+            for tc in row._tr.tc_lst:
+                if tc.vMerge == "continue":
+                    continue
+                if tc.xpath(".//w:tbl | .//w:drawing | .//w:pict | .//w:bookmarkStart | .//w:fldChar | .//w:sdt"):
+                    raise ValueError("Row prototypes with nested tables, drawings, bookmarks, fields or controls are unsupported")
+                prototypes.append(tc)
+        for item in edit["items"]:
+            if len(item["contents"]) != len(prototypes):
+                raise ValueError(f"Each item needs {len(prototypes)} contents entries for physical cells, excluding vertical continuations")
+        from docx.table import _Cell
+        anchor = rows[-1]._tr
+        for item in edit["items"]:
+            cells = []
+            cloned_rows = []
+            for original in rows:
+                element = self.clone_structure(original._tr)
+                anchor.addnext(element); anchor = element
+                cloned_rows.append(element)
+                cells.extend(_Cell(tc, original._parent) for tc in element.tc_lst if tc.vMerge != "continue")
+            for cell, content in zip(cells, item["contents"]):
+                if "asset_ids" in content:
+                    self.add_images(cell, content["asset_ids"], content.get("max_height_inches", 2.5))
+                else:
+                    self.put_text(cell, content["text"], content.get("alignment"))
+            if edit.get("keep_together", True):
+                for index, tr in enumerate(cloned_rows):
+                    pr = tr.get_or_add_trPr()
+                    if pr.find(qn("w:cantSplit")) is None:
+                        pr.append(OxmlElement("w:cantSplit"))
+                    for tc in tr.tc_lst:
+                        cell = _Cell(tc, rows[0]._parent)
+                        for pi, paragraph in enumerate(cell.paragraphs):
+                            paragraph.paragraph_format.keep_with_next = index < len(cloned_rows) - 1 or pi < len(cell.paragraphs) - 1
+        self.touched_parts.add(str(rows[0].part.partname).lstrip("/"))
+        for row in rows:
+            row._tr.getparent().remove(row._tr)
 
     @staticmethod
     def paragraphs(node):
@@ -92,9 +238,11 @@ class DocxEditor:
         return node.paragraphs if hasattr(node, "paragraphs") else [node]
 
     @staticmethod
-    def guard_text(p):
-        if p._p.xpath(".//w:drawing | .//w:pict | .//w:fldChar | .//w:fldSimple | .//w:hyperlink | .//w:sdt"):
-            raise ValueError("Text operation would damage an image, field, hyperlink or content control")
+    def guard_text(p, *, preserve_anchors=False):
+        if p._p.xpath(".//w:drawing | .//w:pict | .//w:fldChar | .//w:fldSimple | .//w:hyperlink | .//w:sdt | .//w:ins | .//w:del"):
+            raise ValueError("Text operation would damage an image, field, hyperlink, tracked change or content control")
+        if not preserve_anchors and p._p.xpath(".//w:bookmarkStart | .//w:bookmarkEnd | .//w:commentRangeStart | .//w:commentRangeEnd"):
+            raise ValueError("Whole-text replacement would remove bookmarks/comments; use a local replace_text/replace_range that does not cross their boundaries")
 
     def put_text(self, node, text, alignment=None):
         paragraphs = self.paragraphs(node)
@@ -117,10 +265,16 @@ class DocxEditor:
         if not old or sum(p.text.count(old) for p in paragraphs) != 1:
             raise ValueError("old must occur exactly once within one paragraph; inspect the target again")
         p = next(p for p in paragraphs if old in p.text)
-        self.guard_text(p)
+        self.replace_range(p, p.text.index(old), p.text.index(old) + len(old), old, new)
+
+    def replace_range(self, p, start, end, expected, new, style_run_index=None):
+        if not isinstance(p, Paragraph):
+            raise ValueError("replace_range requires a paragraph ID")
+        if not 0 <= start < end <= len(p.text) or p.text[start:end] != expected:
+            raise ValueError(f"Range/expected text mismatch at [{start}, {end}); actual={p.text[start:end]!r}, paragraph length={len(p.text)}; inspect the current paragraph")
+        self.guard_text(p, preserve_anchors=True)
         if "".join(r.text for r in p.runs) != p.text:
             raise ValueError("This paragraph contains unsupported non-run text")
-        start, end = p.text.index(old), p.text.index(old) + len(old)
         position, matches = 0, []
         for run in p.runs:
             text = run.text
@@ -130,6 +284,15 @@ class DocxEditor:
             position = right
         first, left, _ = matches[0]
         last, last_left, _ = matches[-1]
+        children = list(p._p)
+        span = children[children.index(first._r):children.index(last._r) + 1]
+        point_anchors = set()
+        for a, b in zip(children, children[1:]):
+            if (a.tag == qn("w:bookmarkStart") and b.tag == qn("w:bookmarkEnd") and
+                    a.get(qn("w:id")) is not None and a.get(qn("w:id")) == b.get(qn("w:id"))):
+                point_anchors.update((a, b))
+        if any(child not in point_anchors and child.tag in {qn("w:bookmarkStart"), qn("w:bookmarkEnd"), qn("w:commentRangeStart"), qn("w:commentRangeEnd")} for child in span):
+            raise ValueError("Replacement crosses a bookmark/comment boundary; select a smaller range")
         prefix, suffix = first.text[:start - left], last.text[end - last_left:]
         fills = (p._p.xpath("./w:pPr/w:shd/@w:fill") or
                  p._p.xpath("ancestor::w:tc[1]/w:tcPr/w:shd/@w:fill") or
@@ -142,6 +305,10 @@ class DocxEditor:
         # placeholder. Use the visible matched text's style, without recoloring
         # any prefix/suffix outside the replacement range.
         style_run = next((r for r, _, _ in matches if visible(r)), first)
+        if style_run_index is not None:
+            if not 0 <= style_run_index < len(p.runs):
+                raise ValueError("style_run_index outside paragraph")
+            style_run = p.runs[style_run_index]
         style = copy.deepcopy(style_run._r.rPr)
         suffix_style = copy.deepcopy(last._r.rPr)
         for run, _, _ in matches:
@@ -170,7 +337,8 @@ class DocxEditor:
         for extra in paragraphs[1:]:
             extra._p.getparent().remove(extra._p)
         body_width = min(s.page_width.inches - s.left_margin.inches - s.right_margin.inches for s in self.doc.sections)
-        width = min(body_width, node.width.inches - .18) if getattr(node, "width", None) else body_width
+        container = node._parent if isinstance(node, Paragraph) else node
+        width = min(body_width, container.width.inches - .18) if getattr(container, "width", None) else body_width
         for index, ref in enumerate(ids):
             path = self.asset_path(ref)
             with Image.open(path) as image:
@@ -200,7 +368,9 @@ class DocxEditor:
         try:
             for edit in edits:
                 op = edit["op"]
-                if op == "repeat_paragraphs":
+                if op == "repeat_rows":
+                    self.repeat_rows(edit)
+                elif op == "repeat_paragraphs":
                     ids = edit["targets"]
                     if len(ids) != len(set(ids)):
                         raise ValueError("Repeated paragraph IDs must be distinct")
@@ -217,7 +387,7 @@ class DocxEditor:
                         if len(item["contents"]) != len(originals):
                             raise ValueError("Each item needs one content per original paragraph")
                         for i, (original, content) in enumerate(zip(originals, item["contents"])):
-                            element = copy.deepcopy(original._p)
+                            element = self.clone_structure(original._p)
                             anchor.addnext(element)
                             anchor = element
                             p = Paragraph(element, original._parent)
@@ -225,20 +395,43 @@ class DocxEditor:
                                 self.add_images(p, content["asset_ids"], content.get("max_height_inches", 2.5))
                             else:
                                 self.put_text(p, content["text"], content.get("alignment"))
-                            p.paragraph_format.keep_together = True
-                            p.paragraph_format.keep_with_next = i < len(originals) - 1
+                            p.paragraph_format.keep_together = edit.get("keep_together", True)
+                            p.paragraph_format.keep_with_next = edit.get("keep_together", True) and i < len(originals) - 1
                     for ref, p in zip(ids, originals):
                         p._p.getparent().remove(p._p)
                         del self.nodes[ref]
                 else:
                     node = self.nodes[edit["target"]]
                     self.touched_parts.add(str(node.part.partname).lstrip("/"))
-                    if op == "set_text":
+                    if op == "replace_range":
+                        self.replace_range(node, edit["start"], edit["end"], edit["expected"], edit["text"], edit.get("style_run_index"))
+                    elif op == "set_list":
+                        self.set_list(node, edit["items"], edit["style"], edit.get("start", 1))
+                    elif op == "set_text":
                         self.put_text(node, edit["text"], edit.get("alignment"))
                     elif op == "replace_text":
                         self.replace_text(node, edit["old"], edit["text"])
                     elif op == "set_images":
                         self.add_images(node, edit["asset_ids"], edit.get("max_height_inches", 2.5))
+                    elif op == "format_row":
+                        if not isinstance(node, _Row):
+                            raise ValueError("format_row requires a row ID")
+                        options = edit["format"]
+                        if "height_pt" in options and "height_rule" not in options:
+                            raise ValueError("height_pt requires height_rule")
+                        if "height_rule" in options:
+                            rule = options["height_rule"]
+                            if rule != "auto" and "height_pt" not in options:
+                                raise ValueError("Non-auto row height requires height_pt")
+                            node.height_rule = {"auto": WD_ROW_HEIGHT_RULE.AUTO, "at_least": WD_ROW_HEIGHT_RULE.AT_LEAST,
+                                                "exact": WD_ROW_HEIGHT_RULE.EXACTLY}[rule]
+                            node.height = None if rule == "auto" else Pt(options["height_pt"])
+                        if "allow_split" in options:
+                            pr = node._tr.get_or_add_trPr()
+                            for element in list(pr.findall(qn("w:cantSplit"))):
+                                pr.remove(element)
+                            if not options["allow_split"]:
+                                pr.append(OxmlElement("w:cantSplit"))
                     elif op == "format_paragraph":
                         for p in self.paragraphs(node):
                             options = edit["format"]
@@ -253,6 +446,7 @@ class DocxEditor:
                                     run.font.size = Pt(options["font_size_pt"])
                     else:
                         raise ValueError(f"Unsupported edit operation: {op}")
+                self.inspect()  # Retire removed descendants before the next edit in this batch.
             self.save()
         except Exception:
             # Deepcopy of python-docx proxies may produce a second, disconnected

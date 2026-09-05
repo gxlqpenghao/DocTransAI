@@ -296,3 +296,9 @@ S01覆盖多队伍、多隐患和图文；S02覆盖DOC监理通知及质量/安�
 | [tests/workflows/test_v1_batch_audit.py](</Users/paul/Coding/DocTransAI-document-tools/tests/workflows/test_v1_batch_audit.py>) | 8 | 迁移场景 | 改接单一转换入口；保留执行失败、作用域与报告状态检查 |
 
 全部test函数/node ID及case原始配置见机器可读明细。本文不删除、不迁移任何测试，也不修改运行配置。
+
+## 第二阶段增量（2026-09-05）
+
+新增 `tests/documents/test_docx_structures.py`，并扩充 `tests/integration/test_document_tools.py`。新增范围包括重复空白与 Unicode 精确范围、正文/单元格真实列表、横向/完整纵向合并行组、旧节点失效与编号回滚、嵌套/页眉表格地址、固定行高、节边界、普通/零宽书签、源页导航、搜索翻页及编辑增量返回。
+
+定向测试 68 项通过；全库仅收集 442 项（阶段一为 423）。真实模型在原三个代表 case 外增加 `word_table_to_docx_penalty`，扩展首次运行因书签保护过宽耗尽步数，修复后单独重跑。详细执行结果与业务限制见 [第二阶段记录](phase2-development.md)。历史 29 个 distinct case 未全量重跑，也不因此标记为新路径通过。

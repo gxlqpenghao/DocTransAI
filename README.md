@@ -77,17 +77,24 @@ Tools: `read_source`, `view_source_page`, `view_source_asset`, `inspect_document
 `edit_document`, `preview_document`, `finish`. Tool schemas live in `tools.py`;
 work principles live in `prompts/document_editing_policy.md`.
 
-DOCX supports text replacement (including across runs), images, repeated paragraph
-groups, alignment, paragraph spacing/font/page-break controls, and versioned atomic batches. Repeating the same batch is
+DOCX supports exact text ranges (including repeated blanks and cross-run spans),
+real decimal/bullet lists, images, paragraph groups, and consecutive table-row
+groups with complete vertical merges. Row height/splitting and paragraph formatting
+are explicit operations. Body, cell, nested-table and header/footer paragraphs have
+individual addresses. Whole nested-table replacement remains unsupported.
+Batches are versioned and atomic. Repeating the same batch is
 idempotent within a run. Source page viewing prefers an unambiguous native
 `scanned_page` asset; otherwise it renders the selected source file and marks
 correspondence with DataProxy page anchors as unverified. Source image checksums
 are checked when present. Repeated upstream asset IDs retain their variants.
 
-Not yet supported: XLSX editing, table-row cloning, nested-table replacement,
+Not yet supported: XLSX editing, whole nested-table replacement,
 floating textboxes, resume after process restart, or an independent semantic
 reviewer. Existing run directories are refused; use a new run rather than replaying
-an old transcript implicitly. Long-template input paging and general history compaction
+an old transcript implicitly. Structure reads are compact by default; selecting node
+IDs exposes run offsets/styles. Edits return only changed/new nodes and removed IDs.
+Native material reads include explicit page/image navigation and paginated search.
+Long-template input paging and general history compaction
 remain later work; oversize requests fail explicitly instead of silently dropping images.
 
 On this macOS workstation use the Codex bundled renderer, not the broken Homebrew

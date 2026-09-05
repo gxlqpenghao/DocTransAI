@@ -240,3 +240,49 @@ def test_template_preview_does_not_satisfy_output_review(tmp_path):
     runtime.round = 2
     with pytest.raises(ValueError, match="current output"):
         runtime.invoke("finish", dict(summary="done", checks=["seen"], missing=[], issues=[]))
+
+
+def test_navigation_keeps_native_anchors_and_search_can_reach_later_hits(tmp_path):
+    corpus, _, _ = material(tmp_path)
+    view = SourceView(corpus)
+    view.objects['ev1']['locator']['page_anchor'] = 'page_1'
+    assert view.read(refs=['ev1'])['objects'][0]['navigation']['scanned_page_asset_refs'] == ['img1']
+    for i in range(25):
+        view.objects[f'hit{i}'] = dict(text='unique needle')
+    first = view.read(query='unique needle')
+    second = view.read(query='unique needle', offset=first['next_offset'])
+    assert len(first['matches']) == 20 and len(second['matches']) == 5
+    assert second['next_offset'] is None
+
+
+def test_runtime_accepts_ranges_lists_rows_and_requires_evidence(tmp_path):
+    corpus, _, image = material(tmp_path)
+    doc = Document(); doc.add_paragraph('____ and ____')
+    template = tmp_path / 'target.docx'; doc.save(template)
+    e = DocxEditor(template, tmp_path / 'out.docx', lambda _: image)
+    rt = ToolRuntime(SourceView(corpus), e, FakePreview(image))
+    edit = dict(op='replace_range', target='n0', start=9, end=13, expected='____', text='fact', source_refs=[], reason='fill')
+    with pytest.raises(ValueError, match='require source_refs'):
+        rt.invoke('edit_document', dict(batch_id='a', version=0, edits=[edit]))
+    edit['source_refs'] = ['ev1']
+    rt.invoke('edit_document', dict(batch_id='a', version=0, edits=[edit]))
+    assert e.doc.paragraphs[0].text == '____ and fact'
+    rt.invoke('edit_document', dict(batch_id='b', version=1, edits=[dict(op='set_list', target='n0',
+        items=['one', 'two'], style='decimal', source_refs=['ev1'], reason='organize')]))
+    assert [p.text for p in Document(e.output).paragraphs] == ['one', 'two']
+
+
+def test_edit_delta_does_not_resend_unchanged_nodes_and_detail_is_on_demand(tmp_path):
+    corpus, _, image = material(tmp_path)
+    doc = Document(); doc.add_paragraph('first'); doc.add_paragraph('fixed')
+    template = tmp_path / 'template.docx'; doc.save(template)
+    e = DocxEditor(template, tmp_path / 'out.docx', lambda _: image)
+    rt = ToolRuntime(SourceView(corpus), e, FakePreview(image))
+    summary, _ = rt.invoke('inspect_document', {})
+    assert 'runs' not in summary['nodes'][0]
+    detail, _ = rt.invoke('inspect_document', dict(node_ids=['n0']))
+    assert detail['nodes'][0]['runs'][0]['start'] == 0
+    delta, _ = rt.invoke('edit_document', dict(batch_id='a', version=0, edits=[dict(
+        op='set_text', target='n0', text='new', source_refs=['ev1'], reason='fill')]))
+    assert [n['id'] for n in delta['nodes']] == ['n0']
+    assert delta['removed_node_ids'] == [] and 'n1' in e.nodes

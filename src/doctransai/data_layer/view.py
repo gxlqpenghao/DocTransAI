@@ -94,6 +94,32 @@ class SourceView:
             raise ValueError(f"Image checksum differs from DataProxy inventory: {ref}")
         return existing[0]
 
+    def navigation(self, ref: str) -> dict:
+        """Expose explicit native anchors only; never infer pages from text/order."""
+        self.check_refs([ref])
+        anchors, assets = set(), set()
+        def visit(value):
+            if isinstance(value, dict):
+                anchor = value.get("page_anchor")
+                if isinstance(anchor, str):
+                    anchors.add(anchor)
+                for asset in value.get("asset_refs", []) or []:
+                    if isinstance(asset, str) and asset in self.assets:
+                        assets.add(asset)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+        visit(self.objects[ref])
+        for asset in assets:
+            visit(self.assets[asset])
+        pages = [asset for asset, row in self.assets.items()
+                 if row.get("asset_type") == "scanned_page" and row.get("page_anchor") in anchors]
+        return dict(native_page_anchors=sorted(anchors), asset_refs=sorted(assets),
+                    scanned_page_asset_refs=pages,
+                    note="Native anchors only; local office-render page correspondence is unverified. Use asset IDs for exact native pages.")
+
     def read(self, *, refs: list[str] | None = None, query: str | None = None,
              offset: int = 0, max_chars: int = 12000) -> dict[str, Any]:
         if bool(refs) == bool(query):
@@ -105,12 +131,14 @@ class SourceView:
                 at = text.casefold().find(query.casefold())
                 if at >= 0:
                     hits.append(dict(ref=ref, snippet=text[max(0, at - 120):at + 400]))
-            return dict(matches=hits[:20], total_matches=len(hits), truncated=len(hits) > 20)
+            return dict(matches=hits[offset:offset + 20], total_matches=len(hits),
+                        next_offset=offset + 20 if offset + 20 < len(hits) else None,
+                        truncated=offset + 20 < len(hits))
         self.check_refs(refs or [])
         objects = []
         for ref in refs or []:
             text = json.dumps(self.objects[ref], ensure_ascii=False)
-            objects.append(dict(ref=ref, json_text=text[offset:offset + max_chars], total_chars=len(text),
+            objects.append(dict(ref=ref, navigation=self.navigation(ref), json_text=text[offset:offset + max_chars], total_chars=len(text),
                                 next_offset=offset + max_chars if offset + max_chars < len(text) else None))
         return dict(objects=objects)
 
