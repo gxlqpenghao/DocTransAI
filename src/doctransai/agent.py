@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 
 import httpx
+from jsonschema import ValidationError
 
 from doctransai.documents.preview import image_part
 
@@ -70,6 +71,9 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
                 result, images = runtime.invoke(name, args)
                 pending_images.extend(images)
                 successful = True
+            except ValidationError as exc:
+                location = "/".join(str(p) for p in exc.absolute_path) or "root"
+                result, images, successful = dict(error="ValidationError", message=f"Invalid arguments at {location} ({exc.validator}): {exc.message[:700]}"), [], False
             except (ValueError, KeyError, TypeError, OSError) as exc:
                 result, images, successful = dict(error=type(exc).__name__, message=str(exc)[:1500]), [], False
             except Exception as exc:
@@ -101,7 +105,7 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
             append_event(trace_path, dict(kind="review_checkpoint", step=step, version=checkpoint_version,
                                          output_image_count=len(runtime.output_pages), earlier_images_omitted=True))
         if runtime.finished is not None:
-            return dict(steps=step, usage=calls, editor_self_check=runtime.finished)
+            return dict(steps=step, usage=calls, **{getattr(runtime, "result_key", "editor_self_check"): runtime.finished})
         if not tool_calls:
-            messages.append(dict(role="user", content="Use the available tools to complete the document, then preview all output pages and finish. A prose answer alone does not edit the file."))
+            messages.append(dict(role="user", content="Use the available tools to complete this phase and submit its required structured completion. A prose answer alone does not complete the phase."))
     raise RuntimeError(f"Step budget exhausted ({config.max_steps}); partial working document retained")

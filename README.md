@@ -48,28 +48,56 @@ The Python API is `doctransai.conversion.convert(TaskSpec(...), config=...)`.
 The API permits injected clients and previewers for tests; ordinary tests need no
 network access, credentials, or LibreOffice.
 
+### Independent review and limited repair
+
+`convert` now runs independent review by default. The reviewer receives a fresh
+context containing source materials, original template, current output and shared
+application requirements; it receives no editor assurance or previous review verdict.
+It has only read tools and `submit_review`. Findings include source/target roles and
+explicit grounding assessments. The same configured model is used in a new context;
+this is not independent human or ground-truth verification.
+
+Default limits: 6 review steps, at most 1 repair round, 4 repair steps, and one shared
+900-second wall-clock budget across editing, review, repair and re-review. Use
+`--max-repair-rounds 0` for read-only review. Repairs are restricted to located findings
+and allowed operations; unresolved ambiguity is not auto-repaired. Every successful
+repair requires another fresh review. Pre-repair documents are retained in `revisions/`.
+
+Review an existing output against its **original** template without regenerating it:
+
+```bash
+uv run doctransai review \
+  --bundle /data/parsed_document_bundle.json \
+  --source-file /data/source.docx \
+  --template /data/original-template.docx \
+  --document /data/existing-output.docx \
+  --output-dir outputs/new-review \
+  --instruction 'Complete the selected task using supported facts only' \
+  --env-file /path/to/credentials.env
+```
+
+The Python equivalent is `review_document(task, document, config=...)` in
+`doctransai.conversion`. Existing inputs are copied, not overwritten.
+
 ### Output and review meaning
 
-- `result.docx` / `result.xlsx` is published only after the model finishes and all pages of the
-  current output version have been delivered in an earlier model round.
-- `working.docx` / `working.xlsx` is retained as a draft when execution fails or exceeds its budget;
-  it is not labeled as a finished result.
-- `review.json` records execution, actual page coverage, editor self-check,
-  missing/ambiguous items, timings and available usage. `trace.jsonl` records tool
-  calls, errors and model response metadata without request-image base64 or keys.
-  Temporary network/server failures are retried once before tool execution; invalid
-  responses, authentication/configuration failures and exhausted budgets are not
-  blindly retried. Failed requests without usage remain marked unknown.
-- Outputs of up to four pages use a compact result-check context after preview:
-  source material, original template structure and current output replace the
-  earlier image/tool conversation. Source pages or original template images can
-  be requested again. This remains editor self-check, not independent review.
-- Phase 1 provides deterministic checks and editor self-check only. Independent
-  semantic review is **not implemented yet**. `review_status=not_run` refers to
-  that independent review, not a missing output preview. `needs_review` reports
-  unresolved issues; it is not a request for permission to run the task.
-- CLI exit codes: 0 = execution completed (not proof of factual correctness),
-  1 = conversion failed, 2 = invalid CLI/runtime configuration.
+- Reviewed outputs are `candidate.docx` / `candidate.xlsx`, including when the model
+  reports no issues. `review_status=model_passed` means only the independent model
+  reported a pass. Real testing found false negatives, so this is not an automatic
+  release/acceptance signal.
+- `needs_review` means findings or uncertainty remain. `incomplete` means a phase
+  did not complete, including budget exhaustion after a repair; it never inherits
+  the previous editor or reviewer success.
+- `working.*` remains after an editing failure. `convert --skip-review` explicitly
+  retains the earlier comparison path, with `result.*` and `not_run`/`needs_review`;
+  those outputs are not independently reviewed.
+- `review.json` records all phases, coverage, findings, hashes, times and usage.
+  `review-N.jsonl` and `repair-N.jsonl` retain separate tool traces without API keys
+  or request-image base64. Unknown usage stays unknown. Acceptance metadata is
+  bound to the exact reviewed output hash/version.
+- CLI exit codes: 0 = completed with model-only pass (or explicit skip-review baseline),
+  1 = execution failed, 2 = invalid configuration, 3 = review needs attention or is
+  incomplete. None proves factual correctness.
 
 ### Current capabilities and limits
 
@@ -104,8 +132,7 @@ Copy empty prototypes before attaching record-specific images. Existing validati
 other sheets and images are retained by ordinary cell edits.
 
 Not yet supported: whole nested-table replacement,
-floating textboxes, resume after process restart, or an independent semantic
-reviewer. Existing run directories are refused; use a new run rather than replaying
+floating textboxes or resume after process restart. Existing run directories are refused; use a new run rather than replaying
 an old transcript implicitly. Structure reads are compact by default; selecting node
 IDs exposes run offsets/styles. Edits return only changed/new nodes and removed IDs.
 Native material reads include explicit page/image navigation and paginated search.
@@ -122,7 +149,8 @@ not represented by `FONTCONFIG_FILE`.
 
 ```bash
 uv run pytest tests/llm tests/data_layer/test_bundle_reader.py \
-  tests/documents tests/integration/test_document_tools.py -q
+  tests/documents tests/integration/test_document_tools.py \
+  tests/integration/test_independent_review.py -q
 ```
 
 Real model acceptance is separate and should use the cases relevant to the current

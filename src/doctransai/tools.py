@@ -191,7 +191,7 @@ class ToolRuntime:
             return result, []
         if name == "preview_document":
             is_output = args.get("target", "output") == "output"
-            pages = self.previewer.render(self.editor.output if is_output else self.editor.template)
+            pages = self.previewer.render(self.editor.output if is_output else getattr(self.editor, "reference_template", self.editor.template))
             if is_output:
                 self.output_pages = pages
             start, count = args.get("start_page", 1), args.get("max_pages", 4)

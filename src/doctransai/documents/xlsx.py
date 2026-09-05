@@ -164,7 +164,7 @@ class XlsxEditor:
                         seen.add(cell.coordinate)
                         key=f's{si}!{cell.coordinate}'
                         merged=next((str(m) for m in ws.merged_cells.ranges if cell.coordinate in m), None)
-                        n=dict(id=key,kind='cell',text=str(self._value(cell.value) or ''),value=self._value(cell.value),
+                        n=dict(id=key,kind='cell',data_type=cell.data_type,value_type=type(cell.value).__name__,text=str(self._value(cell.value) or ''),value=self._value(cell.value),
                             formula=cell.value if cell.data_type=='f' else None, merged_range=merged,
                             writable=not isinstance(cell,MergedCell) and cell.data_type!='f' and not ws.protection.sheet,
                             number_format=cell.number_format)

@@ -184,7 +184,7 @@ def test_conversion_uses_new_tools_and_publishes_only_after_finish(tmp_path, mon
     monkeypatch.setattr("doctransai.conversion.read_parsed_document_bundle", lambda _: corpus)
     client = FakeClient()
     task = TaskSpec(corpus.bundle_path, template, tmp_path / "run", "Fill the project")
-    result = convert(task, client=client, previewer=FakePreview(image))
+    result = convert(task, config=RuntimeConfig(review_enabled=False), client=client, previewer=FakePreview(image))
     assert result.execution_status == "completed", result.issues
     assert result.review_status == "not_run"  # no independent semantic reviewer yet
     assert client.saw_output_image
@@ -201,7 +201,7 @@ def test_budget_exhaustion_retains_draft_but_never_publishes_success(tmp_path, m
     corpus, template, image = material(tmp_path)
     monkeypatch.setattr("doctransai.conversion.read_parsed_document_bundle", lambda _: corpus)
     result = convert(TaskSpec(corpus.bundle_path, template, tmp_path / "run", "Fill"),
-                     config=RuntimeConfig(max_steps=1), client=FakeClient(), previewer=FakePreview(image))
+                     config=RuntimeConfig(max_steps=1,review_enabled=False), client=FakeClient(), previewer=FakePreview(image))
     assert result.execution_status == "failed" and result.output_path is None
     report = json.loads(Path(result.report_path).read_text())
     assert Path(report["draft_path"]).exists()
@@ -223,6 +223,7 @@ def test_transient_model_retry_does_not_replay_successful_edit(tmp_path, monkeyp
             return super().chat(*args, **kwargs)
 
     result = convert(TaskSpec(corpus.bundle_path, template, tmp_path / "retry-run", "Fill"),
+                     config=RuntimeConfig(review_enabled=False),
                      client=RetryClient(), previewer=FakePreview(image))
     report = json.loads(Path(result.report_path).read_text())
     assert result.execution_status == "completed"
@@ -301,7 +302,7 @@ def test_xlsx_conversion_selects_workbook_tools_and_output_extension(tmp_path, m
                    ('preview_document',{}),('finish',dict(summary='done',checks=['seen'],missing=[],issues=[]))]
             name,args=calls[self.index];self.index+=1
             return dict(message=dict(role='assistant',content='',tool_calls=[dict(id=str(self.index),type='function',function=dict(name=name,arguments=json.dumps(args)))]),usage=None)
-    result=convert(TaskSpec(corpus.bundle_path,template,tmp_path/'run','Fill'),client=Client(),previewer=FakePreview(image))
+    result=convert(TaskSpec(corpus.bundle_path,template,tmp_path/'run','Fill'),config=RuntimeConfig(review_enabled=False),client=Client(),previewer=FakePreview(image))
     assert result.execution_status=='completed',result.issues
     assert result.output_path.endswith('.xlsx') and load_workbook(result.output_path).active['A1'].value=='Example project'
     assert load_workbook(template).active['A1'].value=='sample'
