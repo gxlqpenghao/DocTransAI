@@ -1,6 +1,6 @@
 [project]
 name = "doctransai"
-version = "1.0.0rc1"
+version = "1.0.0"
 description = "Template-driven document transformation with structured evidence and provenance."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

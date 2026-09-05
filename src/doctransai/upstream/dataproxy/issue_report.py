@@ -5,7 +5,7 @@ from typing import Any
 
 
 DATAPROXY_BOUNDARY = "doctransai.upstream.dataproxy"
-DATAPROXY_UPSTREAM_ROOT = "/Users/paul/Coding/DataProxy"
+DATAPROXY_UPSTREAM_ROOT = "<configured DataProxy root>"
 
 
 @dataclass(frozen=True, slots=True)

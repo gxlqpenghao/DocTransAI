@@ -18,7 +18,7 @@
 - `review` 对 current 的同一份输出追加现有独立复核，使用900秒总预算的剩余额度：台账520秒、通知单477秒。这减少重新生成造成的质量混淆，但独立调用有少量重复准备/渲染开销，不冒充一次 convert 的完全相同内部轨迹。
 - 主要成对运行，最多2个请求任务并行。每个实验臂仅一次，不做显著性结论。历史阶段运行仅用于定位重复错误，不混入本次受控结果。
 
-脚本：[compare_k3_paths.py](../scripts/compare_k3_paths.py)。数值：[k3-path-comparison.json](k3-path-comparison.json)。完整产物、请求指标、工具日志与质量记录在 `outputs/k3_comparison_20260905/`。
+历史实验脚本已从推荐交付面移除；数值：[k3-path-comparison.json](k3-path-comparison.json)。完整产物、请求指标、工具日志与质量记录在 `outputs/k3_comparison_20260905/`（本地生成目录，不进入交付包）。
 
 ## 新跑结果
 

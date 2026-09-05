@@ -17,7 +17,7 @@ def test_create_dataproxy_issue_report_is_structured_and_serializable() -> None:
         observed_behavior="Bundle summary omitted document_count.",
         expected_behavior="Bundle summary should include document_count.",
         callable_path="dataproxy.pipeline:run",
-        file_paths=["/Users/paul/Coding/DataProxy/src/dataproxy/pipeline.py"],
+        file_paths=["<DataProxy checkout>/src/dataproxy/pipeline.py"],
         details={"document_id": "doc-7"},
     )
 
@@ -25,7 +25,7 @@ def test_create_dataproxy_issue_report_is_structured_and_serializable() -> None:
 
     assert payload["upstream_root"] == DATAPROXY_UPSTREAM_ROOT
     assert payload["boundary"] == "doctransai.upstream.dataproxy"
-    assert payload["file_paths"] == ["/Users/paul/Coding/DataProxy/src/dataproxy/pipeline.py"]
+    assert payload["file_paths"] == ["<DataProxy checkout>/src/dataproxy/pipeline.py"]
     assert payload["details"] == {"document_id": "doc-7"}
     assert json.loads(json.dumps(payload)) == payload
 

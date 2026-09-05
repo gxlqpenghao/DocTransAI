@@ -375,6 +375,38 @@ def test_xlsx_conversion_selects_workbook_tools_and_output_extension(tmp_path, m
     assert load_workbook(template).active['A1'].value=='sample'
 
 
+def test_selected_source_ref_does_not_implicitly_clear_existing_xlsx_content(tmp_path, monkeypatch):
+    from openpyxl import Workbook, load_workbook
+    corpus, _, image = material(tmp_path)
+    monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle', lambda _: corpus)
+    template = tmp_path / 'filled-template.xlsx'
+    workbook = Workbook()
+    workbook.active['A1'] = 'header'
+    workbook.active['A2'] = 'existing content'
+    workbook.save(template)
+
+    class Client:
+        index = 0
+
+        def chat(self, messages, tools, **kwargs):
+            calls = [
+                ('edit_document', dict(batch_id='retain', version=0, edits=[dict(
+                    op='set_cells', target='s0!A3', values=[['new fact']], source_refs=['ev1'], reason='explicit fill')])),
+                ('finish', dict(summary='done')),
+            ]
+            name, args = calls[self.index]
+            self.index += 1
+            return dict(message=dict(role='assistant', content='', tool_calls=[dict(
+                id=str(self.index), type='function', function=dict(name=name, arguments=json.dumps(args)))]),
+                        usage=None, model='test-client')
+
+    result = convert(TaskSpec(corpus.bundle_path, template, tmp_path / 'retain-run', 'Fill selected fact'),
+                     config=RuntimeConfig(review_enabled=False), client=Client(), previewer=FakePreview(image))
+    assert result.execution_status == 'completed', result.issues
+    output = load_workbook(result.output_path).active
+    assert output['A2'].value == 'existing content' and output['A3'].value == 'new fact'
+
+
 def test_post_write_verification_error_never_reports_completed(tmp_path, monkeypatch):
     corpus, template, image = material(tmp_path)
     monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle', lambda _: corpus)

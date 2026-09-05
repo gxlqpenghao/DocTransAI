@@ -79,13 +79,6 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             # range and blank writable cells.
             ranges = [f"{sheet['id']}!{sheet['used_range']}" for sheet in reference_snapshot["sheets"]]
             reference_snapshot = reference_editor_for_snapshot.inspect(node_ids=ranges)
-            if task.source_refs:
-                reference_snapshot["v1_template_contract"] = (
-                    "When the task declares a selected source record, populated rows in the target workbook are "
-                    "template examples unless the instruction explicitly says to retain them. For a single-record "
-                    "output, keep the header and row formatting, use one compatible record row for the selected "
-                    "record, and clear unrelated example values and images. Do not treat example facts as source evidence."
-                )
         previewer = previewer or Previewer(output_dir / "previews", config, deadline=deadline)
         if progress:
             progress("生成模板预览" if existing_document is None else "准备原模板对照信息")

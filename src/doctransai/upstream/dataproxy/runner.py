@@ -13,7 +13,7 @@ from doctransai.upstream.dataproxy.issue_report import (
 
 
 DATAPROXY_CALLABLE_ENV = "DOCTRANSAI_DATAPROXY_CALLABLE"
-DATAPROXY_PYTHONPATH_HINT = "/Users/paul/Coding/DataProxy/src"
+DATAPROXY_PYTHONPATH_HINT = "<DataProxy checkout>/src"
 
 
 @dataclass(frozen=True, slots=True)
