@@ -1,0 +1,308 @@
+{
+  "model": "kimi-k3",
+  "temperature": 1.0,
+  "production_commit": "5b38e78",
+  "cases": 2,
+  "generation_runs": 6,
+  "paired_review_runs": 2,
+  "metrics": [
+    {
+      "run": "ledger_compact",
+      "status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 139.812,
+      "model_seconds": 131.653,
+      "non_model_seconds": 8.15900000000002,
+      "requests": 4,
+      "tool_calls": 5,
+      "tool_errors": 0,
+      "input_text_chars": 18076,
+      "source_chars": 11981,
+      "document_chars": 5956,
+      "prompt_tokens": 153379,
+      "cached_prompt_tokens": 108032,
+      "thinking_tokens": 2768,
+      "output_text_tokens": 1519,
+      "unknown_usage": 0,
+      "first_event_median": 5.854914729483426
+    },
+    {
+      "run": "ledger_current",
+      "status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 377.08,
+      "model_seconds": 368.418,
+      "non_model_seconds": 8.661999999999978,
+      "requests": 5,
+      "tool_calls": 7,
+      "tool_errors": 1,
+      "input_text_chars": 106218,
+      "source_chars": 37908,
+      "document_chars": 68171,
+      "prompt_tokens": 487781,
+      "cached_prompt_tokens": 291072,
+      "thinking_tokens": 9621,
+      "output_text_tokens": 2964,
+      "unknown_usage": 0,
+      "first_event_median": 6.415021541004535
+    },
+    {
+      "run": "ledger_lean",
+      "status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 273.295,
+      "model_seconds": 264.872,
+      "non_model_seconds": 8.423000000000002,
+      "requests": 5,
+      "tool_calls": 6,
+      "tool_errors": 1,
+      "input_text_chars": 80291,
+      "source_chars": 11981,
+      "document_chars": 68171,
+      "prompt_tokens": 367807,
+      "cached_prompt_tokens": 281856,
+      "thinking_tokens": 6051,
+      "output_text_tokens": 2212,
+      "unknown_usage": 0,
+      "first_event_median": 5.757138958957512
+    },
+    {
+      "run": "ledger_review",
+      "status": "completed",
+      "review_status": "incomplete",
+      "elapsed_seconds": 523.176,
+      "model_seconds": 514.646,
+      "non_model_seconds": 8.530000000000086,
+      "requests": 5,
+      "tool_calls": 5,
+      "tool_errors": 0,
+      "input_text_chars": 106218,
+      "source_chars": 37908,
+      "document_chars": 68171,
+      "prompt_tokens": 268182,
+      "cached_prompt_tokens": 118272,
+      "thinking_tokens": 11853,
+      "output_text_tokens": 3833,
+      "unknown_usage": 1,
+      "first_event_median": 5.809423291997518
+    },
+    {
+      "run": "notice_compact",
+      "status": "completed",
+      "review_status": "needs_review",
+      "elapsed_seconds": 692.866,
+      "model_seconds": 683.275,
+      "non_model_seconds": 9.591000000000008,
+      "requests": 7,
+      "tool_calls": 11,
+      "tool_errors": 1,
+      "input_text_chars": 16192,
+      "source_chars": 6193,
+      "document_chars": 9880,
+      "prompt_tokens": 299887,
+      "cached_prompt_tokens": 235520,
+      "thinking_tokens": 18534,
+      "output_text_tokens": 4628,
+      "unknown_usage": 0,
+      "first_event_median": 4.9642532499856316
+    },
+    {
+      "run": "notice_continuous",
+      "status": "completed",
+      "review_status": "needs_review",
+      "elapsed_seconds": 694.337,
+      "model_seconds": 689.2909999999999,
+      "non_model_seconds": 5.046000000000049,
+      "requests": 4,
+      "tool_calls": 6,
+      "tool_errors": 0,
+      "input_text_chars": 18933,
+      "source_chars": 7541,
+      "document_chars": 11273,
+      "prompt_tokens": 168932,
+      "cached_prompt_tokens": 92160,
+      "thinking_tokens": 19118,
+      "output_text_tokens": 2439,
+      "unknown_usage": 0,
+      "first_event_median": 6.290239062480396
+    },
+    {
+      "run": "notice_current",
+      "status": "completed",
+      "review_status": "not_run",
+      "elapsed_seconds": 422.93,
+      "model_seconds": 412.964,
+      "non_model_seconds": 9.966000000000008,
+      "requests": 5,
+      "tool_calls": 7,
+      "tool_errors": 0,
+      "input_text_chars": 18933,
+      "source_chars": 7541,
+      "document_chars": 11273,
+      "prompt_tokens": 148587,
+      "cached_prompt_tokens": 84992,
+      "thinking_tokens": 12110,
+      "output_text_tokens": 2390,
+      "unknown_usage": 0,
+      "first_event_median": 4.207975249970332
+    },
+    {
+      "run": "notice_review",
+      "status": "completed",
+      "review_status": "needs_review",
+      "elapsed_seconds": 278.491,
+      "model_seconds": 275.847,
+      "non_model_seconds": 2.6440000000000055,
+      "requests": 2,
+      "tool_calls": 2,
+      "tool_errors": 0,
+      "input_text_chars": 18933,
+      "source_chars": 7541,
+      "document_chars": 11273,
+      "prompt_tokens": 60762,
+      "cached_prompt_tokens": 24576,
+      "thinking_tokens": 6444,
+      "output_text_tokens": 2115,
+      "unknown_usage": 0,
+      "first_event_median": 6.175800270983018
+    }
+  ],
+  "quality": {
+    "ledger_current": {
+      "values_equal_current": true,
+      "images": 3,
+      "all_pages_visually_checked": true,
+      "date_types": [
+        "s",
+        "s",
+        "s",
+        "s"
+      ]
+    },
+    "ledger_lean": {
+      "values_equal_current": true,
+      "images": 3,
+      "all_pages_visually_checked": true,
+      "date_types": [
+        "s",
+        "s",
+        "s",
+        "s"
+      ]
+    },
+    "ledger_compact": {
+      "values_equal_current": true,
+      "images": 3,
+      "all_pages_visually_checked": true,
+      "date_types": [
+        "s",
+        "s",
+        "s",
+        "s"
+      ]
+    },
+    "ledger_review": {
+      "changed_value_cells": [
+        "N3",
+        "O3",
+        "R3",
+        "V3"
+      ],
+      "date_types": [
+        "d",
+        "d",
+        "d",
+        "d"
+      ],
+      "rendered_pixels_equal_current": [
+        true,
+        true,
+        true
+      ],
+      "full_review_complete": false
+    },
+    "notice_current": {
+      "all_pages_visually_checked": true,
+      "images": 2,
+      "core_problem_and_remedy_text_supported": true,
+      "issue_date_blank": false,
+      "uncertainty_reported": false
+    },
+    "notice_compact": {
+      "all_pages_visually_checked": true,
+      "images": 2,
+      "core_problem_and_remedy_text_supported": true,
+      "issue_date_blank": false,
+      "uncertainty_reported": true
+    },
+    "notice_continuous": {
+      "all_pages_visually_checked": true,
+      "images": 2,
+      "core_problem_and_remedy_text_supported": true,
+      "issue_date_blank": true,
+      "uncertainty_reported": true
+    },
+    "notice_review": {
+      "candidate_identical_to_input": true,
+      "new_role_confirmation_targets": 2,
+      "issue_date_assumption_still_accepted": true
+    }
+  },
+  "identical_first_request": {
+    "reconstructed_from_saved_inputs": true,
+    "identical": true,
+    "requests": [
+      {
+        "profile": "notice_current",
+        "digest": "d5b8d1bce069812905e5242365bd63504ed7a5246dd8525c5c63f5be45ab8561",
+        "policy_hash": "7f6c3479bf46703dbc9bd06e3ef9865a8903dc57a6913459187e5f18d1a84581",
+        "tools_hash": "79390458aa90d2418766cc7c6baac1bfcacf25759a47651b003474589e9caa90",
+        "elapsed": 159.79585362499347,
+        "first_event": 2.926212167018093,
+        "usage": {
+          "completion_tokens": 5282,
+          "completion_tokens_details": {
+            "reasoning_tokens": 5077,
+            "text_tokens": 205
+          },
+          "prompt_tokens": 16965,
+          "prompt_tokens_details": {
+            "cached_tokens": 256,
+            "image_tokens": 5990,
+            "text_tokens": 10975
+          },
+          "total_tokens": 22247
+        }
+      },
+      {
+        "profile": "notice_continuous",
+        "digest": "d5b8d1bce069812905e5242365bd63504ed7a5246dd8525c5c63f5be45ab8561",
+        "policy_hash": "7f6c3479bf46703dbc9bd06e3ef9865a8903dc57a6913459187e5f18d1a84581",
+        "tools_hash": "79390458aa90d2418766cc7c6baac1bfcacf25759a47651b003474589e9caa90",
+        "elapsed": 470.1729100830271,
+        "first_event": 4.574454916000832,
+        "usage": {
+          "completion_tokens": 14530,
+          "completion_tokens_details": {
+            "reasoning_tokens": 14156,
+            "text_tokens": 374
+          },
+          "prompt_tokens": 16965,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "image_tokens": 5990,
+            "text_tokens": 10975
+          },
+          "total_tokens": 31495
+        }
+      }
+    ]
+  },
+  "limitations": [
+    "One run per arm; no statistical speed guarantee",
+    "Profiles combine changes except continuous",
+    "Paired review reuses the exact current output but has small repeated setup/render costs",
+    "Cached prompt tokens included; token sums are not monetary cost",
+    "No alternative model tested"
+  ]
+}
