@@ -47,7 +47,7 @@ def _cache_key(template_path: Path, *, format_key: str) -> str:
 def _materialize_pdf(template_path: Path, *, format_key: str, output_dir: Path) -> Path | None:
     if format_key == "pdf":
         return template_path
-    if format_key not in {"docx", "xlsx"}:
+    if format_key not in {"doc", "docx", "xlsx"}:
         return None
 
     subprocess.run(

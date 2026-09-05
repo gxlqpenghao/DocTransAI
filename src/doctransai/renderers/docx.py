@@ -117,8 +117,10 @@ class DocxRenderer:
             if paragraph is None:
                 diagnostics.append(_missing_target_diagnostic(text_fill.slot_id, text_fill.target))
                 continue
-            if text_fill.target.target_kind == "implicit_blank":
+            if _is_implicit_blank_target(text_fill.target):
                 rewrite_result = _replace_implicit_blank(paragraph, text_fill.value, target=text_fill.target)
+            elif text_fill.target.target_kind == "visual_text_anchor":
+                rewrite_result = _replace_visual_text_anchor(paragraph, text_fill.value, target=text_fill.target)
             elif text_fill.target.target_kind == "table_cell_blank":
                 rewrite_result = _replace_table_cell_blank(paragraph, text_fill.value)
             elif text_fill.target.target_kind == "table_cell_instruction":
@@ -148,6 +150,7 @@ class DocxRenderer:
 
         _clear_unresolved_placeholders(document, plan.unresolved_slots)
         _replace_residual_filled_placeholders(document, plan.text_fills)
+        _clear_underlined_x_template_markers(document)
         output_path = Path(plan.output.output_path).expanduser()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         document.save(output_path)
@@ -309,6 +312,9 @@ def _apply_repeated_paragraph_regions(
 
 
 def _resolve_target_paragraph(document: DocxDocument, target: TargetRef) -> Paragraph | None:
+    if _is_header_footer_target(target):
+        return _resolve_header_footer_target_paragraph(document, target)
+
     if target.paragraph_index is not None:
         if 0 <= target.paragraph_index < len(document.paragraphs):
             return document.paragraphs[target.paragraph_index]
@@ -336,6 +342,64 @@ def _resolve_target_paragraph(document: DocxDocument, target: TargetRef) -> Para
     if cell.paragraphs:
         return cell.paragraphs[0]
     return None
+
+
+def _resolve_header_footer_target_paragraph(document: DocxDocument, target: TargetRef) -> Paragraph | None:
+    story = _header_footer_story(document, target)
+    if story is None:
+        return None
+
+    if target.table_index is None:
+        if target.paragraph_index is None:
+            return None
+        if 0 <= target.paragraph_index < len(story.paragraphs):
+            return story.paragraphs[target.paragraph_index]
+        return None
+
+    if target.row_index is None or target.column_index is None:
+        return None
+    if not 0 <= target.table_index < len(story.tables):
+        return None
+
+    table = story.tables[target.table_index]
+    if not 0 <= target.row_index < len(table.rows):
+        return None
+    if not 0 <= target.column_index < len(table.columns):
+        return None
+
+    cell = table.cell(target.row_index, target.column_index)
+    if target.cell_paragraph_index is not None:
+        if 0 <= target.cell_paragraph_index < len(cell.paragraphs):
+            return cell.paragraphs[target.cell_paragraph_index]
+        return None
+    placeholder_paragraph = _paragraph_with_placeholder(cell)
+    if placeholder_paragraph is not None:
+        return placeholder_paragraph
+    if cell.paragraphs:
+        return cell.paragraphs[0]
+    return None
+
+
+def _header_footer_story(document: DocxDocument, target: TargetRef):
+    if not document.sections:
+        return None
+    section_index = target.page_index if target.page_index is not None else 0
+    if section_index < 0 or section_index >= len(document.sections):
+        return None
+    section = document.sections[section_index]
+    if target.target_kind.startswith("header_"):
+        return section.header
+    if target.target_kind.startswith("footer_"):
+        return section.footer
+    return None
+
+
+def _is_header_footer_target(target: TargetRef) -> bool:
+    return target.target_kind.startswith(("header_", "footer_"))
+
+
+def _is_implicit_blank_target(target: TargetRef) -> bool:
+    return target.target_kind == "implicit_blank" or target.target_kind.endswith("_implicit_blank")
 
 
 def _paragraph_with_placeholder(cell: _Cell) -> Paragraph | None:
@@ -638,6 +702,104 @@ def _replace_placeholder(
     return PlaceholderRewriteResult(True, "applied", target_run=target_run)
 
 
+def _replace_visual_text_anchor(
+    paragraph: Paragraph,
+    replacement: str,
+    *,
+    target: TargetRef,
+) -> PlaceholderRewriteResult:
+    label = target.notes
+    if not label:
+        return PlaceholderRewriteResult(False, "missing_visual_anchor")
+    if not _paragraph_markup_is_safe(paragraph):
+        return PlaceholderRewriteResult(False, "unsafe_paragraph_markup")
+
+    date_unit_result = _replace_visual_date_unit_anchor(paragraph, replacement, label=label)
+    if date_unit_result is not None:
+        return date_unit_result
+
+    text = paragraph.text
+    label_start = text.find(label)
+    if label_start < 0:
+        return PlaceholderRewriteResult(False, "missing_visual_anchor")
+
+    insert_at = label_start + len(label)
+    if insert_at < len(text) and text[insert_at] in {":", "："}:
+        insert_at += 1
+    return _insert_text_at_paragraph_offset(paragraph, insert_at, replacement)
+
+
+def _replace_visual_date_unit_anchor(
+    paragraph: Paragraph,
+    replacement: str,
+    *,
+    label: str,
+) -> PlaceholderRewriteResult | None:
+    if _compact_visual_anchor_text(label) not in {"年月日", "年月日时"}:
+        return None
+    match = re.search(r"\s*年\s*月\s*日(?:\s*时)?", paragraph.text)
+    if match is None:
+        return None
+    return _replace_text_at_paragraph_range(paragraph, match.start(), match.end(), replacement)
+
+
+def _compact_visual_anchor_text(text: str) -> str:
+    return "".join(str(text).split())
+
+
+def _insert_text_at_paragraph_offset(
+    paragraph: Paragraph,
+    offset: int,
+    text: str,
+) -> PlaceholderRewriteResult:
+    if not paragraph.runs:
+        run = paragraph.add_run(text)
+        return PlaceholderRewriteResult(True, "applied", target_run=run)
+
+    spans = _run_spans(paragraph)
+    for index, (run_start, run_end) in enumerate(spans):
+        is_last_run = index == len(spans) - 1
+        if run_start <= offset < run_end or (is_last_run and offset == run_end):
+            run = paragraph.runs[index]
+            style = _capture_run_style(run)
+            in_run_offset = max(0, min(offset - run_start, len(run.text)))
+            run.text = run.text[:in_run_offset] + text + run.text[in_run_offset:]
+            _apply_run_style(run, style)
+            return PlaceholderRewriteResult(True, "applied", target_run=run)
+    return PlaceholderRewriteResult(False, "missing_visual_anchor")
+
+
+def _replace_text_at_paragraph_range(
+    paragraph: Paragraph,
+    start: int,
+    end: int,
+    text: str,
+) -> PlaceholderRewriteResult:
+    spans = _run_spans(paragraph)
+    overlap_indices = [
+        index
+        for index, (run_start, run_end) in enumerate(spans)
+        if run_start < end and start < run_end
+    ]
+    if not overlap_indices:
+        return PlaceholderRewriteResult(False, "missing_visual_anchor")
+
+    first_index = overlap_indices[0]
+    last_index = overlap_indices[-1]
+    first_run = paragraph.runs[first_index]
+    run_style = _capture_run_style(first_run)
+    first_start, _ = spans[first_index]
+    _, last_end = spans[last_index]
+    last_run = paragraph.runs[last_index]
+    prefix = first_run.text[: max(start - first_start, 0)]
+    suffix = last_run.text[max(end - (last_end - len(last_run.text)), 0) :]
+    first_run.text = prefix + text + suffix
+    _apply_run_style(first_run, run_style)
+    for index in overlap_indices[1:]:
+        paragraph.runs[index].text = ""
+    return PlaceholderRewriteResult(True, "applied", target_run=first_run)
+
+
 def _replace_placeholder_for_inline_object(
     paragraph: Paragraph,
     *,
@@ -800,9 +962,43 @@ def _replace_table_cell_instruction(paragraph: Paragraph, replacement: str) -> P
     run_style = _capture_run_style(target_run)
     for run in paragraph.runs:
         run.text = ""
-    target_run.text = replacement
+    lines = _instruction_lines(replacement)
+    if len(lines) <= 1:
+        target_run.text = replacement
+        _apply_run_style(target_run, run_style)
+        return PlaceholderRewriteResult(True, "applied", target_run=target_run)
+
+    target_run.text = lines[0]
+    current_run = target_run
+    for line in lines[1:]:
+        next_run = _insert_run_after(current_run, style=run_style)
+        next_run.add_break()
+        next_run.add_text(line)
+        current_run = next_run
     _apply_run_style(target_run, run_style)
     return PlaceholderRewriteResult(True, "applied", target_run=target_run)
+
+
+def _instruction_lines(replacement: str) -> list[str]:
+    text = replacement.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return []
+    if "\n" in text:
+        return [line.strip() for line in text.split("\n") if line.strip()]
+
+    # Preserve numbered/source-authored list structure inside instruction cells.
+    text = re.sub(
+        r"(?<=[：:；;])\s*(?=(?:[（(]?\d+[）)]|[一二三四五六七八九十]+[、.]|\d+[、.)．]))",
+        "\n",
+        text,
+    )
+    text = re.sub(
+        r"(?<=[；;])\s*(?=(?:专利|软件著作权|标准规范|应用证明|获奖证书|论文|著作|工法|标准)[:：])",
+        "\n",
+        text,
+    )
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    return lines or [replacement]
 
 
 def _replace_table_cell_choice(paragraph: Paragraph, replacement: str) -> PlaceholderRewriteResult:
@@ -922,12 +1118,32 @@ def _replace_residual_filled_placeholders(document: DocxDocument, text_fills: li
                     break
 
 
+def _clear_underlined_x_template_markers(document: DocxDocument) -> None:
+    for paragraph in _iter_docx_paragraphs(document):
+        if not _paragraph_markup_is_safe(paragraph):
+            continue
+        for run in paragraph.runs:
+            if _is_underlined_x_template_marker(run):
+                run.text = ""
+
+
+def _is_underlined_x_template_marker(run: Run) -> bool:
+    return run.underline is True and (run.text or "").strip() == "X"
+
+
 def _iter_docx_paragraphs(document: DocxDocument):
     yield from document.paragraphs
     for table in document.tables:
         for row in table.rows:
             for cell in row.cells:
                 yield from cell.paragraphs
+    for section in document.sections:
+        for story in (section.header, section.footer):
+            yield from story.paragraphs
+            for table in story.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        yield from cell.paragraphs
 
 
 def _placeholder_match(paragraph_text: str, *, placeholder_name: str | None) -> re.Match[str] | None:
@@ -1163,6 +1379,14 @@ def _rewrite_failure_diagnostic(slot_id: str, target: TargetRef, reason: str) ->
 
 
 def _target_label(target: TargetRef) -> str:
+    if _is_header_footer_target(target):
+        story = "header" if target.target_kind.startswith("header_") else "footer"
+        section_index = target.page_index if target.page_index is not None else 0
+        if target.table_index is not None and target.row_index is not None and target.column_index is not None:
+            return f"{story}[{section_index}].table[{target.table_index}].cell[{target.row_index},{target.column_index}]"
+        if target.paragraph_index is not None:
+            return f"{story}[{section_index}].paragraph[{target.paragraph_index}]"
+        return target.target_kind
     if target.paragraph_index is not None:
         return f"paragraph[{target.paragraph_index}]"
     if target.table_index is not None and target.row_index is not None and target.column_index is not None:

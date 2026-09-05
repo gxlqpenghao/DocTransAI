@@ -19,9 +19,9 @@ DOCTRANSAI_LLM_MAX_REQUEST_BYTES_ENV = "DOCTRANSAI_LLM_MAX_REQUEST_BYTES"
 DOCTRANSAI_LLM_MAX_INPUT_CHARS_ENV = "DOCTRANSAI_LLM_MAX_INPUT_CHARS"
 DOCTRANSAI_DATAPROXY_ROOT_ENV = "DOCTRANSAI_DATAPROXY_ROOT"
 
-DEFAULT_DOCTRANSAI_LLM_MODEL = "kimi-k2.6"
+DEFAULT_DOCTRANSAI_LLM_MODEL = "kimi-k3"
 DEFAULT_DOCTRANSAI_LLM_MAX_REQUEST_BYTES = 6_000_000
-DEFAULT_DOCTRANSAI_LLM_MAX_INPUT_CHARS = 260_000
+DEFAULT_DOCTRANSAI_LLM_MAX_INPUT_CHARS = 0
 
 _FALLBACK_API_KEY_ENV = "DATAPROXY_QWEN_API_KEY"
 _FALLBACK_BASE_URL_ENV = "DATAPROXY_QWEN_BASE_URL"
@@ -270,20 +270,22 @@ def estimate_chat_input_chars(
     user_parts: list[dict[str, Any]] | None = None,
 ) -> int:
     user_content_chars = (
-        _string_content_char_count(user_parts)
+        _input_content_char_count(user_parts)
         if user_parts is not None
         else len(user_prompt)
     )
     return len(system_prompt) + user_content_chars
 
 
-def _string_content_char_count(value: object) -> int:
+def _input_content_char_count(value: object) -> int:
+    if isinstance(value, dict) and value.get("type") == "image_url":
+        return 0
     if isinstance(value, str):
         return len(value)
     if isinstance(value, dict):
-        return sum(_string_content_char_count(item) for item in value.values())
+        return sum(_input_content_char_count(item) for item in value.values())
     if isinstance(value, list):
-        return sum(_string_content_char_count(item) for item in value)
+        return sum(_input_content_char_count(item) for item in value)
     return 0
 
 

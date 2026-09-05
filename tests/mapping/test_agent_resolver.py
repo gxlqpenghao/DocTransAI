@@ -231,7 +231,7 @@ def test_resolve_mapping_decisions_preflights_oversized_input_length(monkeypatch
 
 
 def test_resolve_mapping_decisions_preflights_oversized_repair_payload(monkeypatch) -> None:
-    monkeypatch.setenv(DOCTRANSAI_LLM_MAX_REQUEST_BYTES_ENV, "10500")
+    monkeypatch.setenv(DOCTRANSAI_LLM_MAX_REQUEST_BYTES_ENV, "11000")
     calls = {"count": 0}
     slot_packets = [
         AgentSlotPacket(

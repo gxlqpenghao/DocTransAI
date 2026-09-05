@@ -127,6 +127,8 @@ def _analyze_docx(path: Path, analyzer_key: str) -> TemplateModel:
                         occupied_cell_tokens.add((table_index, cell_token))
                         slots.append(choice_slot)
 
+    slots.extend(_extract_docx_header_footer_slots(document=document, slot_offset=len(slots)))
+
     diagnostics: list[TemplateDiagnostic] = []
     if not slots:
         diagnostics.append(
@@ -149,6 +151,59 @@ def _analyze_docx(path: Path, analyzer_key: str) -> TemplateModel:
         repeat_regions=repeat_regions,
         diagnostics=diagnostics,
     )
+
+
+def _extract_docx_header_footer_slots(*, document, slot_offset: int) -> list[TemplateSlot]:
+    slots: list[TemplateSlot] = []
+    for section_index, section in enumerate(document.sections):
+        for story_name, story in (("header", section.header), ("footer", section.footer)):
+            if section_index > 0 and getattr(story, "is_linked_to_previous", False):
+                continue
+            story_prefix = f"docx-{story_name}-{section_index}"
+            for paragraph_index, paragraph in enumerate(story.paragraphs):
+                address = SlotAddress(
+                    format_key="docx",
+                    address_kind=f"{story_name}_paragraph",
+                    paragraph_index=paragraph_index,
+                    page_index=section_index,
+                )
+                slots.extend(
+                    _extract_docx_writable_slots(
+                        paragraph=paragraph,
+                        address=address,
+                        slot_offset=slot_offset + len(slots),
+                        slot_prefix=f"{story_prefix}-paragraph",
+                        blank_slot_prefix=f"{story_prefix}-blank",
+                    )
+                )
+
+            for table_index, table in enumerate(story.tables):
+                for row_index, row in enumerate(table.rows):
+                    for column_index, cell in enumerate(row.cells):
+                        for paragraph_index_in_cell, paragraph in enumerate(cell.paragraphs):
+                            address = SlotAddress(
+                                format_key="docx",
+                                address_kind=f"{story_name}_table_cell",
+                                cell_paragraph_index=paragraph_index_in_cell,
+                                table_index=table_index,
+                                row_index=row_index,
+                                column_index=column_index,
+                                page_index=section_index,
+                            )
+                            extracted_slots = _extract_docx_writable_slots(
+                                paragraph=paragraph,
+                                address=address,
+                                slot_offset=slot_offset + len(slots),
+                                slot_prefix=f"{story_prefix}-table-{table_index}",
+                                blank_slot_prefix=f"{story_prefix}-table-{table_index}-blank",
+                            )
+                            for slot in extracted_slots:
+                                if slot.context_before is None:
+                                    slot.context_before = _neighbor_cell_text(row, column_index, direction=-1)
+                                if slot.context_after is None:
+                                    slot.context_after = _neighbor_cell_text(row, column_index, direction=1)
+                                slots.append(slot)
+    return slots
 
 
 def _extract_docx_writable_slots(
@@ -180,6 +235,7 @@ def _extract_docx_writable_slots(
 
 def _annotate_docx_media_group_slots(slots: list[TemplateSlot]) -> None:
     slots_by_paragraph: dict[tuple[object, ...], list[TemplateSlot]] = {}
+    slots_by_table_row: dict[tuple[int, int], list[TemplateSlot]] = {}
     for slot in slots:
         if slot.address.format_key != "docx":
             continue
@@ -192,6 +248,8 @@ def _annotate_docx_media_group_slots(slots: list[TemplateSlot]) -> None:
             slot.address.cell_paragraph_index,
         )
         slots_by_paragraph.setdefault(key, []).append(slot)
+        if slot.address.table_index is not None and slot.address.row_index is not None:
+            slots_by_table_row.setdefault((slot.address.table_index, slot.address.row_index), []).append(slot)
 
     for paragraph_slots in slots_by_paragraph.values():
         image_slots = [slot for slot in paragraph_slots if slot.slot_kind == "image"]
@@ -211,6 +269,39 @@ def _annotate_docx_media_group_slots(slots: list[TemplateSlot]) -> None:
         caption_slot.placement_constraints["multi_value_allowed"] = True
         caption_slot.placement_constraints["media_group_role"] = "caption"
         caption_slot.placement_constraints["paired_image_slot_id"] = image_slot.slot_id
+
+    for row_slots in slots_by_table_row.values():
+        image_slots = [slot for slot in row_slots if slot.slot_kind == "image"]
+        text_slots = [slot for slot in row_slots if slot.slot_kind == "text"]
+        for image_slot in image_slots:
+            partner = _paired_row_text_slot_for_image(image_slot, text_slots)
+            if partner is None:
+                continue
+            image_slot.placement_constraints.setdefault("multi_value_allowed", True)
+            image_slot.placement_constraints.setdefault("media_group_role", "image")
+            image_slot.placement_constraints.setdefault("paired_text_slot_id", partner.slot_id)
+            partner.placement_constraints.setdefault("multi_value_allowed", True)
+            partner.placement_constraints.setdefault("media_group_role", "description")
+            partner.placement_constraints.setdefault("paired_image_slot_id", image_slot.slot_id)
+
+
+def _paired_row_text_slot_for_image(image_slot: TemplateSlot, text_slots: list[TemplateSlot]) -> TemplateSlot | None:
+    image_base = _media_slot_base_name(image_slot.raw_name)
+    if not image_base:
+        return None
+    for text_slot in text_slots:
+        if not _is_media_description_slot(text_slot):
+            continue
+        if _media_slot_base_name(text_slot.raw_name) == image_base:
+            return text_slot
+    return None
+
+
+def _media_slot_base_name(name: str) -> str:
+    normalized = re.sub(r"\s+", "", name.casefold())
+    normalized = re.sub(r"(照片|图片|photo|image|img|pic)$", "", normalized)
+    normalized = re.sub(r"(描述|说明|备注|caption|description|desc|情况|结果|content)$", "", normalized)
+    return normalized
 
 
 def _extract_docx_blank_table_cell_slot(
@@ -447,6 +538,7 @@ def _clean_blank_cell_label(text: str | None) -> str | None:
     if _PLACEHOLDER_PATTERN.search(text):
         return None
     normalized = re.sub(r"\s+", "", text)
+    normalized = _strip_placeholder_x_markers(normalized)
     normalized = normalized.strip("：:；;，,。.、 ")
     if not normalized:
         return None
@@ -549,8 +641,18 @@ def _docx_paragraph_repeat_regions(slots: list[TemplateSlot]) -> list[RepeatRegi
             next_index += 1
 
         region_id = f"docx-repeat-paragraph-{len(repeat_regions)}"
+        description_slots = [slot for slot in region_slots if slot.slot_kind == "text"]
+        image_slot = image_slots[0]
         for slot in region_slots:
             slot.repeat_region_id = region_id
+            slot.placement_constraints.setdefault("multi_value_allowed", True)
+            if slot.slot_kind == "image":
+                slot.placement_constraints.setdefault("media_group_role", "image")
+                if description_slots:
+                    slot.placement_constraints.setdefault("paired_caption_slot_id", description_slots[0].slot_id)
+            elif slot.slot_kind == "text":
+                slot.placement_constraints.setdefault("media_group_role", "caption")
+                slot.placement_constraints.setdefault("paired_image_slot_id", image_slot.slot_id)
 
         repeat_regions.append(
             RepeatRegion(
@@ -618,7 +720,7 @@ def _extract_implicit_blank_slots(
                 slot_kind="text",
                 address=SlotAddress(
                     format_key=address.format_key,
-                    address_kind="implicit_blank",
+                    address_kind=_implicit_blank_address_kind(address.address_kind),
                     paragraph_index=address.paragraph_index,
                     cell_paragraph_index=address.cell_paragraph_index,
                     run_index=start,
@@ -641,14 +743,20 @@ def _extract_implicit_blank_slots(
     return slots
 
 
+def _implicit_blank_address_kind(address_kind: str) -> str:
+    if address_kind in {"header_paragraph", "footer_paragraph", "header_table_cell", "footer_table_cell"}:
+        return f"{address_kind}_implicit_blank"
+    return "implicit_blank"
+
+
 def _is_fill_blank_run(run) -> bool:
     text = run.text or ""
     return bool(text) and text.isspace() and bool(run.underline)
 
 
 def _implicit_blank_metadata(*, context_before: str, context_after: str, index: int) -> tuple[str, dict[str, str]]:
-    before = re.sub(r"\s+", "", context_before)
-    after = re.sub(r"\s+", "", context_after)
+    before = _strip_placeholder_x_markers(re.sub(r"\s+", "", context_before))
+    after = _strip_placeholder_x_markers(re.sub(r"\s+", "", context_after))
     constraints: dict[str, str] = {}
     if after.startswith("年"):
         constraints["inferred_value_type"] = "datetime"
@@ -658,6 +766,10 @@ def _implicit_blank_metadata(*, context_before: str, context_after: str, index: 
         constraints["inferred_value_type"] = "datetime"
         constraints["temporal_granularity"] = "month"
         return f"datetime_month_blank_{index + 1}", constraints
+    if after.startswith(("日内", "天内", "个工作日内", "个日历日内")):
+        constraints["inferred_value_type"] = "duration"
+        constraints["temporal_granularity"] = "days"
+        return f"duration_days_blank_{index + 1}", constraints
     if after.startswith("日"):
         constraints["inferred_value_type"] = "datetime"
         constraints["temporal_granularity"] = "day"
@@ -686,12 +798,19 @@ def _contextual_blank_label(context_before: str) -> str | None:
     parts = [part for part in re.split(r"[:：；;，,。.\n\r]", compact) if part]
     label = parts[-1] if parts else compact
     label = re.sub(r"[（(][^）)]{0,12}[）)]$", "", label)
+    label = _strip_placeholder_x_markers(label)
     label = label.strip("：:；;，,。.、 ")
     if not label or "{" in label or "}" in label:
         return None
     if len(label) < 2 or len(label) > 30:
         return None
     return label
+
+
+def _strip_placeholder_x_markers(value: str) -> str:
+    if not any("\u4e00" <= character <= "\u9fff" for character in value):
+        return value
+    return re.sub(r"X+$", "", re.sub(r"^X+", "", value))
 
 
 def _analyze_xlsx(path: Path, analyzer_key: str) -> TemplateModel:

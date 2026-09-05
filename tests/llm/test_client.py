@@ -185,6 +185,25 @@ def test_doctransai_llm_client_rejects_oversized_input_before_http(monkeypatch: 
     assert "exceeds configured maximum" in str(exc_info.value)
 
 
+def test_doctransai_llm_client_does_not_apply_default_input_char_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"http": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["http"] = True
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setenv(DOCTRANSAI_LLM_API_KEY_ENV, "api-key")
+    monkeypatch.setenv(DOCTRANSAI_LLM_BASE_URL_ENV, "https://llm.example.com/v1")
+    monkeypatch.setenv(DOCTRANSAI_LLM_MAX_REQUEST_BYTES_ENV, "1000000")
+    monkeypatch.delenv(DOCTRANSAI_LLM_MAX_INPUT_CHARS_ENV, raising=False)
+
+    client = DoctransaiLLMClient(DoctransaiLLMConfig(transport=httpx.MockTransport(handler)))
+
+    assert client.max_input_chars is None
+    assert client.generate(system_prompt="sys", user_prompt="x" * 300_000) == "ok"
+    assert called["http"] is True
+
+
 def test_doctransai_llm_client_reads_dataproxy_env_file_as_fallback(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -222,8 +241,8 @@ def test_doctransai_llm_client_reads_dataproxy_env_file_as_fallback(
     assert client.max_tokens == 8192
 
 
-def test_default_doctransai_model_tracks_kimi_k2_6() -> None:
-    assert DEFAULT_DOCTRANSAI_LLM_MODEL == "kimi-k2.6"
+def test_default_doctransai_model_tracks_kimi_k3() -> None:
+    assert DEFAULT_DOCTRANSAI_LLM_MODEL == "kimi-k3"
 
 
 def test_doctransai_llm_client_default_timeout_supports_long_agent_requests(

@@ -35,6 +35,30 @@ def test_docx_analyzer_extracts_placeholders_across_runs_and_tables(tmp_path: Pa
     assert model.slots[1].address.column_index == 0
 
 
+def test_docx_analyzer_extracts_header_and_footer_writable_slots(tmp_path: Path) -> None:
+    template_path = tmp_path / "header-footer-template.docx"
+
+    document = Document()
+    header_paragraph = document.sections[0].header.paragraphs[0]
+    header_paragraph.text = "编号：{整改单编号}"
+    footer_paragraph = document.sections[0].footer.paragraphs[0]
+    footer_paragraph.add_run("签收人：")
+    blank = footer_paragraph.add_run("        ")
+    blank.underline = True
+    document.add_paragraph("正文")
+    document.save(template_path)
+
+    model = analyze_template(template_path)
+
+    slots_by_name = {slot.raw_name: slot for slot in model.slots}
+    assert slots_by_name["整改单编号"].address.address_kind == "header_paragraph"
+    assert slots_by_name["整改单编号"].address.page_index == 0
+    assert slots_by_name["整改单编号"].address.paragraph_index == 0
+    assert slots_by_name["签收人"].address.address_kind == "footer_paragraph_implicit_blank"
+    assert slots_by_name["签收人"].address.page_index == 0
+    assert slots_by_name["签收人"].mode == "implicit_blank"
+
+
 def test_docx_analyzer_deduplicates_placeholders_in_merged_cells(tmp_path: Path) -> None:
     template_path = tmp_path / "merged-template.docx"
 
@@ -125,11 +149,9 @@ def test_docx_analyzer_ignores_static_notice_body_paragraphs(tmp_path: Path) -> 
     ]
     assert all("安全隐患整改通知单" not in slot.raw_name for slot in model.slots)
     assert all("Picture 1" not in slot.raw_name for slot in model.slots)
-    assert model.slots[1].placement_constraints == {
-        "list_item": True,
-        "list_style": "numbered",
-        "multi_value_allowed": True,
-    }
+    assert model.slots[1].placement_constraints["list_item"] is True
+    assert model.slots[1].placement_constraints["list_style"] == "numbered"
+    assert model.slots[1].placement_constraints["multi_value_allowed"] is True
 
 
 def test_docx_analyzer_treats_photo_description_placeholder_as_text(tmp_path: Path) -> None:
@@ -199,6 +221,32 @@ def test_docx_analyzer_detects_underlined_fill_blanks_as_slots(tmp_path: Path) -
     }
 
 
+def test_docx_analyzer_treats_ri_nei_blank_as_duration_not_date(tmp_path: Path) -> None:
+    template_path = tmp_path / "duration-days-blank-template.docx"
+
+    document = Document()
+    paragraph = document.add_paragraph()
+    paragraph.add_run("当事单位（人员）在收到处罚单后")
+    days = paragraph.add_run("    ")
+    days.underline = True
+    paragraph.add_run("日内将处罚款项交至财务部门。")
+    document.save(template_path)
+
+    model = analyze_template(template_path)
+
+    implicit_slots = [slot for slot in model.slots if slot.mode == "implicit_blank"]
+
+    assert [(slot.raw_name, slot.placement_constraints) for slot in implicit_slots] == [
+        (
+            "duration_days_blank_1",
+            {
+                "inferred_value_type": "duration",
+                "temporal_granularity": "days",
+            },
+        )
+    ]
+
+
 def test_docx_analyzer_names_generic_underlined_blanks_from_nearby_label(tmp_path: Path) -> None:
     template_path = tmp_path / "signature-blank-template.docx"
 
@@ -223,6 +271,30 @@ def test_docx_analyzer_names_generic_underlined_blanks_from_nearby_label(tmp_pat
     assert [slot.placement_constraints["label_source"] for slot in implicit_slots] == [
         "context_before",
         "context_before",
+    ]
+
+
+def test_docx_analyzer_removes_x_markers_from_implicit_blank_label(tmp_path: Path) -> None:
+    template_path = tmp_path / "x-marker-blank-template.docx"
+
+    document = Document()
+    paragraph = document.add_paragraph()
+    paragraph.add_run("X 项目安全管理部 于X")
+    blank = paragraph.add_run("        ")
+    blank.underline = True
+    paragraph.add_run("对你劳务队提出整改要求。")
+    document.save(template_path)
+
+    model = analyze_template(template_path)
+
+    implicit_slots = [slot for slot in model.slots if slot.mode == "implicit_blank"]
+
+    assert [(slot.raw_name, slot.canonical_name, slot.placement_constraints) for slot in implicit_slots] == [
+        (
+            "datetime_blank_1",
+            "datetime_blank_1",
+            {"inferred_value_type": "datetime", "temporal_granularity": "date_or_datetime"},
+        ),
     ]
 
 
@@ -408,6 +480,33 @@ def test_docx_analyzer_marks_paragraph_image_and_following_text_as_repeat_region
     slots_by_name = {slot.raw_name: slot for slot in model.slots}
     assert slots_by_name["隐患照片"].repeat_region_id == region.region_id
     assert slots_by_name["隐患描述"].repeat_region_id == region.region_id
+    assert slots_by_name["隐患照片"].placement_constraints["multi_value_allowed"] is True
+    assert slots_by_name["隐患照片"].placement_constraints["media_group_role"] == "image"
+    assert slots_by_name["隐患照片"].placement_constraints["paired_caption_slot_id"] == slots_by_name["隐患描述"].slot_id
+    assert slots_by_name["隐患描述"].placement_constraints["multi_value_allowed"] is True
+    assert slots_by_name["隐患描述"].placement_constraints["media_group_role"] == "caption"
+    assert slots_by_name["隐患描述"].placement_constraints["paired_image_slot_id"] == slots_by_name["隐患照片"].slot_id
+
+
+def test_docx_analyzer_marks_table_row_description_and_image_slots_as_multi_value_group(tmp_path: Path) -> None:
+    template_path = tmp_path / "table-row-media-template.docx"
+
+    document = Document()
+    table = document.add_table(rows=1, cols=3)
+    table.cell(0, 0).text = "隐患描述"
+    table.cell(0, 1).text = "{隐患描述}"
+    table.cell(0, 2).text = "{隐患照片}"
+    document.save(template_path)
+
+    model = analyze_template(template_path)
+    slots_by_name = {slot.raw_name: slot for slot in model.slots}
+
+    assert slots_by_name["隐患照片"].placement_constraints["multi_value_allowed"] is True
+    assert slots_by_name["隐患照片"].placement_constraints["media_group_role"] == "image"
+    assert slots_by_name["隐患照片"].placement_constraints["paired_text_slot_id"] == slots_by_name["隐患描述"].slot_id
+    assert slots_by_name["隐患描述"].placement_constraints["multi_value_allowed"] is True
+    assert slots_by_name["隐患描述"].placement_constraints["media_group_role"] == "description"
+    assert slots_by_name["隐患描述"].placement_constraints["paired_image_slot_id"] == slots_by_name["隐患照片"].slot_id
 
 
 def test_xlsx_analyzer_detects_header_region_and_photo_column(tmp_path: Path) -> None:

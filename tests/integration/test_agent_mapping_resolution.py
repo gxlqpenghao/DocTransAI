@@ -82,7 +82,7 @@ def test_run_agent_mapping_resolution_writes_real_decision_output_with_stub(tmp_
         "责任单位负责人",
         "手机号",
         "人员姓名",
-        "datetime_day_blank_1",
+        "duration_days_blank_1",
     ]
     assert [(item["slot_id"], item["decision"]) for item in payload["decisions"]] == [
         ("docx-table-0-2", "candidate"),
@@ -138,7 +138,7 @@ def test_run_agent_mapping_resolution_can_select_primary_record_by_source_instan
         "责任单位负责人",
         "手机号",
         "人员姓名",
-        "datetime_day_blank_1",
+        "duration_days_blank_1",
     ]
 
 

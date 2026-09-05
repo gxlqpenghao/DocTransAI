@@ -59,23 +59,23 @@ def test_build_agent_mapping_preview_from_real_bundle_writes_small_person_batch(
         },
         {
             "slot_id": "docx-table-0-blank-7",
-            "canonical_key": "datetime_day_blank_1",
-            "reason_code": "ambiguous_match",
-            "message": "Multiple candidates remain tied for datetime_day_blank_1.",
+            "canonical_key": "duration_days_blank_1",
+            "reason_code": "missing_value",
+            "message": "No candidate was found for duration_days_blank_1.",
         },
     ]
     assert [item["raw_name"] for item in payload["slot_packets"]] == [
         "责任单位负责人",
         "手机号",
         "人员姓名",
-        "datetime_day_blank_1",
+        "duration_days_blank_1",
     ]
-    assert [item["expected_value_type"] for item in payload["slot_packets"]] == ["person", "phone", "person", "datetime"]
+    assert [item["expected_value_type"] for item in payload["slot_packets"]] == ["person", "phone", "person", "text"]
     packets_by_name = {item["raw_name"]: item for item in payload["slot_packets"]}
     assert [item["value_type"] for item in packets_by_name["责任单位负责人"]["candidates"]] == ["person"] * 21
     assert packets_by_name["手机号"]["candidates"] == []
     assert [item["value_type"] for item in packets_by_name["人员姓名"]["candidates"]] == ["person"] * 21
-    assert [item["value_type"] for item in packets_by_name["datetime_day_blank_1"]["candidates"]] == ["datetime"] * 35
+    assert packets_by_name["duration_days_blank_1"]["candidates"]
     assert packets_by_name["责任单位负责人"]["candidates"][0]["relation"] == "same_record_row"
     assert packets_by_name["责任单位负责人"]["candidates"][0]["locator"]["column_index"] == 17
     assert any(item["relation"] == "document_context" for item in packets_by_name["责任单位负责人"]["candidates"])
@@ -104,7 +104,7 @@ def test_build_agent_mapping_preview_can_select_primary_record_by_source_instanc
         "责任单位负责人",
         "手机号",
         "人员姓名",
-        "datetime_day_blank_1",
+        "duration_days_blank_1",
     ]
 
 

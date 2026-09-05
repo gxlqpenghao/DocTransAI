@@ -434,7 +434,7 @@ def test_run_v1_conversion_can_apply_saved_agent_decision_payload(tmp_path: Path
     conversion_report = json.loads(output_path.with_suffix(".conversion_report.json").read_text(encoding="utf-8"))
 
     assert rendered.tables[0].cell(0, 3).text == "杨恩赐"
-    assert {item["canonical_key"] for item in conversion_report["unresolved"]} == {"手机号", "人员姓名", "datetime_day_blank_1"}
+    assert {item["canonical_key"] for item in conversion_report["unresolved"]} == {"手机号", "人员姓名", "duration_days_blank_1"}
     assert any(item["code"] == "agent_resolved_slot" for item in conversion_report["diagnostics"])
 
 

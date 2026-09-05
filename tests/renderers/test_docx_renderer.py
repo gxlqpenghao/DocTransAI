@@ -385,6 +385,46 @@ def test_docx_renderer_replaces_instruction_table_cell_slot(tmp_path: Path) -> N
     assert result.diagnostics == []
 
 
+def test_docx_renderer_inserts_line_breaks_for_numbered_instruction_cell_content(tmp_path: Path) -> None:
+    template_path = tmp_path / "instruction-cell-lines-template.docx"
+    output_path = tmp_path / "outputs" / "instruction-cell-lines-rendered.docx"
+
+    document = Document()
+    table = document.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "创新点"
+    table.cell(0, 1).text = "（请分条填写）"
+    document.save(template_path)
+
+    result = _renderer().render(
+        _build_plan(
+            template_path=template_path,
+            output_path=output_path,
+            text_fills=[
+                TextFill(
+                    slot_id="slot-innovation",
+                    target=TargetRef(
+                        format_key="docx",
+                        target_kind="table_cell_instruction",
+                        table_index=0,
+                        row_index=0,
+                        column_index=1,
+                        cell_paragraph_index=0,
+                        notes="创新点",
+                    ),
+                    value="1、第一点；2、第二点；3、第三点。",
+                )
+            ],
+        )
+    )
+
+    rendered = Document(output_path)
+    paragraph = rendered.tables[0].cell(0, 1).paragraphs[0]
+
+    assert paragraph.text == "1、第一点；\n2、第二点；\n3、第三点。"
+    assert result.applied_text_slots == ["slot-innovation"]
+    assert result.diagnostics == []
+
+
 def test_docx_renderer_marks_matching_checkbox_options_in_choice_cell(tmp_path: Path) -> None:
     template_path = tmp_path / "choice-cell-template.docx"
     output_path = tmp_path / "outputs" / "choice-cell-rendered.docx"
@@ -702,7 +742,134 @@ def test_docx_renderer_replaces_underlined_blank_run_by_index(tmp_path: Path) ->
     assert result.diagnostics == []
 
 
-def test_docx_renderer_preserves_underlined_literal_before_implicit_blank(tmp_path: Path) -> None:
+def test_docx_renderer_fills_visual_text_anchor_after_label(tmp_path: Path) -> None:
+    template_path = tmp_path / "visual-anchor-template.docx"
+    output_path = tmp_path / "outputs" / "visual-anchor-rendered.docx"
+
+    document = Document()
+    document.add_paragraph("接收人（签字）：            接收日期：    年   月   日   时     编号：")
+    document.save(template_path)
+
+    result = _renderer().render(
+        _build_plan(
+            template_path=template_path,
+            output_path=output_path,
+            text_fills=[
+                TextFill(
+                    slot_id="visual-target-编号",
+                    target=TargetRef(
+                        format_key="docx",
+                        target_kind="visual_text_anchor",
+                        paragraph_index=0,
+                        notes="编号",
+                    ),
+                    value="LQ-2026-001",
+                )
+            ],
+        )
+    )
+
+    rendered = Document(output_path)
+
+    assert rendered.paragraphs[0].text.endswith("编号：LQ-2026-001")
+    assert result.applied_text_slots == ["visual-target-编号"]
+    assert result.diagnostics == []
+
+
+def test_docx_renderer_fills_visual_date_unit_anchor(tmp_path: Path) -> None:
+    template_path = tmp_path / "visual-date-anchor-template.docx"
+    output_path = tmp_path / "outputs" / "visual-date-anchor-rendered.docx"
+
+    document = Document()
+    table = document.add_table(rows=1, cols=1)
+    table.cell(0, 0).text = "（公章）"
+    table.cell(0, 0).add_paragraph("                                       年    月    日")
+    document.save(template_path)
+
+    result = _renderer().render(
+        _build_plan(
+            template_path=template_path,
+            output_path=output_path,
+            text_fills=[
+                TextFill(
+                    slot_id="visual-target-date",
+                    target=TargetRef(
+                        format_key="docx",
+                        target_kind="visual_text_anchor",
+                        table_index=0,
+                        row_index=0,
+                        column_index=0,
+                        cell_paragraph_index=1,
+                        notes="年 月 日",
+                    ),
+                    value="2022年3月27日",
+                )
+            ],
+        )
+    )
+
+    rendered = Document(output_path)
+
+    assert rendered.tables[0].cell(0, 0).paragraphs[1].text.strip() == "2022年3月27日"
+    assert result.applied_text_slots == ["visual-target-date"]
+    assert result.diagnostics == []
+
+
+def test_docx_renderer_replaces_header_placeholder_and_footer_blank(tmp_path: Path) -> None:
+    template_path = tmp_path / "header-footer-template.docx"
+    output_path = tmp_path / "outputs" / "header-footer-rendered.docx"
+
+    document = Document()
+    document.sections[0].header.paragraphs[0].text = "编号：{整改单编号}"
+    footer_paragraph = document.sections[0].footer.paragraphs[0]
+    footer_paragraph.add_run("签收人：")
+    blank = footer_paragraph.add_run("        ")
+    blank.underline = True
+    document.add_paragraph("正文")
+    document.save(template_path)
+
+    result = _renderer().render(
+        _build_plan(
+            template_path=template_path,
+            output_path=output_path,
+            text_fills=[
+                TextFill(
+                    slot_id="slot-id",
+                    target=TargetRef(
+                        format_key="docx",
+                        target_kind="header_paragraph",
+                        paragraph_index=0,
+                        page_index=0,
+                        notes="整改单编号",
+                    ),
+                    value="20260514001",
+                ),
+                TextFill(
+                    slot_id="slot-receiver",
+                    target=TargetRef(
+                        format_key="docx",
+                        target_kind="footer_paragraph_implicit_blank",
+                        paragraph_index=0,
+                        run_index=1,
+                        run_end_index=1,
+                        page_index=0,
+                        notes="签收人",
+                    ),
+                    value="张三",
+                ),
+            ],
+        )
+    )
+
+    rendered = Document(output_path)
+
+    assert rendered.sections[0].header.paragraphs[0].text == "编号：20260514001"
+    assert rendered.sections[0].footer.paragraphs[0].text == "签收人：张三"
+    assert result.applied_text_slots == ["slot-id", "slot-receiver"]
+    assert result.diagnostics == []
+
+
+def test_docx_renderer_clears_underlined_x_marker_before_implicit_blank(tmp_path: Path) -> None:
     template_path = tmp_path / "underlined-marker-template.docx"
     output_path = tmp_path / "outputs" / "underlined-marker-rendered.docx"
 
@@ -739,12 +906,12 @@ def test_docx_renderer_preserves_underlined_literal_before_implicit_blank(tmp_pa
 
     rendered = Document(output_path)
 
-    assert rendered.paragraphs[0].text == "于X2022年3月27日进行检查"
+    assert rendered.paragraphs[0].text == "于2022年3月27日进行检查"
     assert result.applied_text_slots == ["slot-check-date"]
     assert result.diagnostics == []
 
 
-def test_docx_renderer_preserves_underlined_literal_before_placeholder(tmp_path: Path) -> None:
+def test_docx_renderer_clears_underlined_x_marker_before_placeholder(tmp_path: Path) -> None:
     template_path = tmp_path / "underlined-placeholder-marker-template.docx"
     output_path = tmp_path / "outputs" / "underlined-placeholder-marker-rendered.docx"
 
@@ -777,12 +944,12 @@ def test_docx_renderer_preserves_underlined_literal_before_placeholder(tmp_path:
 
     rendered = Document(output_path)
 
-    assert rendered.paragraphs[0].text == "X龚文升劳务队："
+    assert rendered.paragraphs[0].text == "龚文升劳务队："
     assert result.applied_text_slots == ["slot-org"]
     assert result.diagnostics == []
 
 
-def test_docx_renderer_preserves_underlined_literal_only_paragraphs(tmp_path: Path) -> None:
+def test_docx_renderer_clears_underlined_x_marker_only_paragraphs(tmp_path: Path) -> None:
     template_path = tmp_path / "marker-only-template.docx"
     output_path = tmp_path / "outputs" / "marker-only-rendered.docx"
 
@@ -814,7 +981,7 @@ def test_docx_renderer_preserves_underlined_literal_only_paragraphs(tmp_path: Pa
 
     rendered = Document(output_path)
 
-    assert rendered.paragraphs[0].text == "X"
+    assert rendered.paragraphs[0].text == ""
     assert rendered.paragraphs[1].text == "龚文升劳务队"
     assert result.applied_text_slots == ["slot-org"]
     assert result.diagnostics == []
