@@ -286,3 +286,22 @@ def test_edit_delta_does_not_resend_unchanged_nodes_and_detail_is_on_demand(tmp_
         op='set_text', target='n0', text='new', source_refs=['ev1'], reason='fill')]))
     assert [n['id'] for n in delta['nodes']] == ['n0']
     assert delta['removed_node_ids'] == [] and 'n1' in e.nodes
+
+
+def test_xlsx_conversion_selects_workbook_tools_and_output_extension(tmp_path, monkeypatch):
+    from openpyxl import Workbook, load_workbook
+    corpus, _, image = material(tmp_path)
+    monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle', lambda _: corpus)
+    template=tmp_path/'template.xlsx';w=Workbook();w.active['A1']='sample';w.save(template)
+    class Client:
+        index=0
+        def chat(self,messages,tools,**kwargs):
+            assert 'set_cells' in json.dumps(tools) and 'repeat_paragraphs' not in json.dumps(tools)
+            calls=[('edit_document',dict(batch_id='a',version=0,edits=[dict(op='set_cells',target='s0!A1',values=[['Example project']],source_refs=['ev1'],reason='native fact')])),
+                   ('preview_document',{}),('finish',dict(summary='done',checks=['seen'],missing=[],issues=[]))]
+            name,args=calls[self.index];self.index+=1
+            return dict(message=dict(role='assistant',content='',tool_calls=[dict(id=str(self.index),type='function',function=dict(name=name,arguments=json.dumps(args)))]),usage=None)
+    result=convert(TaskSpec(corpus.bundle_path,template,tmp_path/'run','Fill'),client=Client(),previewer=FakePreview(image))
+    assert result.execution_status=='completed',result.issues
+    assert result.output_path.endswith('.xlsx') and load_workbook(result.output_path).active['A1'].value=='Example project'
+    assert load_workbook(template).active['A1'].value=='sample'

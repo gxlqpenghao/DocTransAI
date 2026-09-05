@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="doctransai")
     parser.add_argument("--version", action="store_true", help="Print the DocTransAI version.")
     commands = parser.add_subparsers(dest="command")
-    convert_parser = commands.add_parser("convert", help="Convert native DataProxy material to a DOCX template with model tools.")
+    convert_parser = commands.add_parser("convert", help="Convert native DataProxy material to a DOCX or XLSX template with model tools.")
     convert_parser.add_argument("--bundle", type=Path, required=True)
     convert_parser.add_argument("--template", type=Path, required=True)
     convert_parser.add_argument("--output-dir", type=Path, required=True, help="A new, non-existing run directory")

@@ -71,7 +71,40 @@ TOOLS = [
                   missing={"type": "array", "items": obj(dict(target=TEXT, kind={"enum": ["source_missing", "manual", "ambiguous", "unsupported"]}, message=TEXT), ["target", "kind", "message"])}),
              ["summary", "checks", "issues", "missing"])),
 ]
-_VALIDATORS = {t["function"]["name"]: Draft202012Validator(t["function"]["parameters"]) for t in TOOLS}
+XLSX_VALUE = {"oneOf": [{"type": ["string", "number", "boolean", "null"]}, obj(dict(date=TEXT), ["date"])]}
+XLSX_EDITS = {"type": "array", "minItems": 1, "maxItems": 40, "items": {"oneOf": [
+    obj(dict(BASE, op={"const": "set_cells"}, values={"type": "array", "minItems": 1, "maxItems": 100,
+        "items": {"type": "array", "items": XLSX_VALUE, "minItems": 1, "maxItems": 100}}, number_format=TEXT),
+        ["op", "target", "values", "source_refs", "reason"]),
+    obj(dict(BASE, op={"const": "set_formula"}, formula=TEXT, expected_formula={"type": ["string", "null"]}),
+        ["op", "target", "formula", "expected_formula", "source_refs", "reason"]),
+    obj(dict(BASE, op={"const": "copy_rows"}, destination_rows={"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1, "maxItems": 100, "uniqueItems": True}),
+        ["op", "target", "destination_rows", "source_refs", "reason"]),
+    obj(dict(BASE, op={"const": "set_cell_images"}, asset_ids={**REFS, "maxItems": 12}), ["op", "target", "asset_ids", "source_refs", "reason"]),
+    obj(dict(BASE, op={"const": "format_cells"}, format={**obj(dict(wrap_text={"type": "boolean"},
+        horizontal={"enum": ["left", "center", "right", "general", "justify"]}, vertical={"enum": ["top", "center", "bottom"]},
+        row_height={"type": "number", "minimum": 1, "maximum": 409}, column_width={"type": "number", "minimum": 1, "maximum": 255},
+        font_size={"type": "number", "minimum": 6, "maximum": 72}, number_format=TEXT)), "minProperties": 1}),
+        ["op", "target", "format", "source_refs", "reason"]),
+    obj(dict(BASE, op={"const": "set_print_area"}, orientation={"enum": ["portrait", "landscape"]},
+        fit_to_width={"type": "integer", "minimum": 0, "maximum": 10}, repeat_rows={"type": "string", "pattern": "^[1-9][0-9]*:[1-9][0-9]*$"}, repeat_columns={"type": "string", "pattern": "^[A-Z]+:[A-Z]+$"}),
+        ["op", "target", "source_refs", "reason"]),
+]}}
+
+
+def tools_for_format(format_key):
+    if format_key != "xlsx":
+        return TOOLS
+    from copy import deepcopy
+    result = deepcopy(TOOLS)
+    inspect = next(t["function"] for t in result if t["function"]["name"] == "inspect_document")
+    inspect["description"] = "Inspect sheets, formulas, merged cells, image anchors and print settings. Default view is bounded to 20 rows/40 columns per sheet. node_ids may contain exact ranges like s0!A21:Y40 to read later rows or details. s0 indexes the first sheet regardless of its name. Blank cells outside the initial view are addressable."
+    edit = next(t["function"] for t in result if t["function"]["name"] == "edit_document")
+    edit["parameters"]["properties"]["edits"] = XLSX_EDITS
+    edit["description"] = "Atomic versioned XLSX batch; targets use s0!A3 or s0!A3:Y5. set_cells writes an exactly shaped matrix: numbers/bools stay typed; {date: ISO} creates Excel dates; null clears; strings starting '=' remain literal. Existing formulas are protected. set_formula requires expected_formula (null for a new formula). copy_rows copies the given row/column block to empty destination start rows, translating relative formulas and preserving styles/complete merges; never inserts or shifts other rows. Copy before filling facts/images, then populate each new record separately. set_cell_images replaces images anchored at one cell; [] removes example images. Size rows/columns BEFORE images to fit them. format_cells changes explicit formatting. set_print_area sets the exact populated print range, orientation, repeat_rows such as 1:2, repeat_columns such as A:B for record identity across horizontal pages, and optional fit_to_width (0 preserves readable scale across pages). Do not squash many columns to an unreadable single page. Formatting, clearing values/images and copying templates need no invented fact refs; new facts need refs."
+    return result
+
+
 
 
 def _deletion_only(old: str, new: str) -> bool:
@@ -83,6 +116,9 @@ def _deletion_only(old: str, new: str) -> bool:
 class ToolRuntime:
     def __init__(self, source, editor, previewer):
         self.source, self.editor, self.previewer = source, editor, previewer
+        self.format_key = getattr(editor, "format_key", "docx")
+        self.tools = tools_for_format(self.format_key)
+        self.validators = {t["function"]["name"]: Draft202012Validator(t["function"]["parameters"]) for t in self.tools}
         self.round = 0
         self.preview_round = -1
         self.preview_version = -1
@@ -91,11 +127,13 @@ class ToolRuntime:
         self.finished = None
 
     def invoke(self, name: str, args: dict) -> tuple[object, list[dict]]:
-        if name not in _VALIDATORS:
+        if name not in self.validators:
             raise ValueError(f"Unknown tool {name}")
-        _VALIDATORS[name].validate(args)
+        self.validators[name].validate(args)
         if name == "read_source":
             return self.source.read(**args), []
+        if name == "inspect_document" and self.format_key == "xlsx":
+            return self.editor.inspect(detail=bool(args.get("node_ids")), node_ids=args.get("node_ids")), []
         if name == "inspect_document":
             snapshot = self.editor.inspect(detail=bool(args.get("node_ids")))
             if args.get("node_ids"):
@@ -111,6 +149,8 @@ class ToolRuntime:
         if name == "view_source_asset":
             parts, metadata = [], []
             for ref in args["refs"]:
+                if ref not in self.source.assets:
+                    raise ValueError(f"Unknown source image ID: {ref}. Use native asset IDs, not file paths. Available IDs: {list(self.source.assets)[:12]}")
                 path = self.source.asset_path(ref)
                 metadata.append(dict(ref=ref, context=self.source.assets[ref]))
                 parts += [{"type": "text", "text": f"Source image {ref}"}, image_part(path)]
@@ -118,6 +158,17 @@ class ToolRuntime:
         if name == "edit_document":
             if args["batch_id"] in self.editor.applied_batches:
                 return self.editor.apply(**args), []
+            if self.format_key == "xlsx":
+                for edit in args["edits"]:
+                    self.source.check_refs(edit["source_refs"])
+                    safe = edit["op"] in ("format_cells", "set_print_area", "copy_rows") or (edit["op"] == "set_cell_images" and not edit["asset_ids"]) or (edit["op"] == "set_cells" and all(v is None or v == "" for row in edit["values"] for v in row))
+                    if not safe and not edit["source_refs"]:
+                        raise ValueError("Content additions require source_refs")
+                self.editor.apply(**args)
+                targets = list(dict.fromkeys(e["target"] for e in args["edits"]))
+                result = self.editor.inspect(node_ids=targets)
+                result.update(already_applied=False, snapshot="affected ranges only; other addresses remain valid; inspect copied destination rows explicitly")
+                return result, []
             for edit in args["edits"]:
                 if edit["op"] in ("repeat_paragraphs", "repeat_rows"):
                     for item in edit["items"]:
@@ -159,12 +210,14 @@ class ToolRuntime:
             next_page = start + len(selected)
             return dict(target="output" if is_output else "template", version=self.editor.version if is_output else None, page_count=len(pages),
                         delivered_pages=[number for number, _ in selected],
+                        covered_output_pages=sorted(self.coverage) if is_output else None,
+                        missing_output_pages=sorted(set(range(1,len(pages)+1))-self.coverage) if is_output else None,
                         next_page=next_page if next_page <= len(pages) else None), parts
         if name == "finish":
             if self.preview_version != self.editor.version or self.preview_round >= self.round:
                 raise ValueError("Inspect a current output preview in an earlier model round before finishing")
             if self.coverage != set(range(1, len(self.output_pages) + 1)):
-                raise ValueError("Not all current output pages were delivered; request remaining pages")
+                raise ValueError(f"Not all current output pages were delivered; missing pages: {sorted(set(range(1, len(self.output_pages) + 1)) - self.coverage)}. Request them before finish.")
             self.finished = args
             return {"finished": True}, []
         raise AssertionError(name)

@@ -4,10 +4,10 @@ DocTransAI is a template-driven document transformation project. It ingests stru
 
 The project keeps its runtime isolated from DataProxy. DataProxy v0 data-asset schemas are vendored as a local contract snapshot under `contracts/dataproxy/data_asset_pack_v0/`, and DocTransAI reads `parsed_document_bundle.json` through its own `doctransai.data_layer` package.
 
-## Document tools path — phase 1
+## Document tools path — DOCX and XLSX
 
 The new `convert` entrypoint uses native DataProxy evidence, a single model tool loop,
-and a DOCX editor. It does not use the legacy source model, slot analyzer, mapping
+and DOCX/XLSX editors. It does not use the legacy source model, slot analyzer, mapping
 planner, or RenderPlan. Legacy modules remain available for comparison.
 
 ```bash
@@ -50,9 +50,9 @@ network access, credentials, or LibreOffice.
 
 ### Output and review meaning
 
-- `result.docx` is published only after the model finishes and all pages of the
+- `result.docx` / `result.xlsx` is published only after the model finishes and all pages of the
   current output version have been delivered in an earlier model round.
-- `working.docx` is retained as a draft when execution fails or exceeds its budget;
+- `working.docx` / `working.xlsx` is retained as a draft when execution fails or exceeds its budget;
   it is not labeled as a finished result.
 - `review.json` records execution, actual page coverage, editor self-check,
   missing/ambiguous items, timings and available usage. `trace.jsonl` records tool
@@ -88,7 +88,22 @@ idempotent within a run. Source page viewing prefers an unambiguous native
 correspondence with DataProxy page anchors as unverified. Source image checksums
 are checked when present. Repeated upstream asset IDs retain their variants.
 
-Not yet supported: XLSX editing, whole nested-table replacement,
+XLSX uses the same entrypoint and seven tools, with format-specific edit schemas.
+Supported operations: typed cell matrices, explicit formula edits, copying complete
+row blocks into empty destinations, anchored image replacement/removal, formatting,
+and print areas/repeated rows or columns. `s0!A3:Y8` addresses the first worksheet.
+Formula cells are protected from ordinary writes; copied relative references are
+translated without inserting rows or shifting other formulas. Formula caches are
+recalculated on open, not independently evaluated by the Python editor.
+
+XLSX edits retain custom XML package metadata. Macros, pivots, external links,
+complex drawing shapes and unsupported extensions are rejected. Copying rows with
+Excel tables, conditional formatting, data validation, links/comments or source
+images requires additional adapters; the editor does not silently drop them.
+Copy empty prototypes before attaching record-specific images. Existing validations,
+other sheets and images are retained by ordinary cell edits.
+
+Not yet supported: whole nested-table replacement,
 floating textboxes, resume after process restart, or an independent semantic
 reviewer. Existing run directories are refused; use a new run rather than replaying
 an old transcript implicitly. Structure reads are compact by default; selecting node

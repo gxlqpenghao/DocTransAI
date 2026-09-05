@@ -14,9 +14,10 @@ from doctransai.config import RuntimeConfig
 from doctransai.data_layer import read_parsed_document_bundle
 from doctransai.data_layer.view import SourceView
 from doctransai.documents.docx import DocxEditor
+from doctransai.documents.xlsx import XlsxEditor
 from doctransai.documents.preview import Previewer, image_part
 from doctransai.llm.client import DoctransaiLLMClient, DoctransaiLLMConfig
-from doctransai.tools import TOOLS, ToolRuntime
+from doctransai.tools import tools_for_format, ToolRuntime
 from doctransai.types import ConversionResult, TaskSpec
 
 
@@ -37,18 +38,20 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
     try:
         if not task.instruction.strip():
             raise ValueError("A conversion instruction is required")
-        if task.template_path.suffix.lower() != ".docx":
-            raise ValueError("This stage supports DOCX editing only; DOC templates need explicit materialization first")
+        suffix = task.template_path.suffix.lower()
+        if suffix not in (".docx", ".xlsx"):
+            raise ValueError("Targets must be DOCX or XLSX; legacy templates need explicit materialization first")
+        tools = tools_for_format(suffix[1:])
         prompt = (Path(__file__).parent / "prompts/document_editing_policy.md").read_text()
         (output_dir / "task.json").write_text(json.dumps(dict(task=asdict(task), config=asdict(config),
             prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
-            tools_sha256=hashlib.sha256(json.dumps(TOOLS, sort_keys=True).encode()).hexdigest()), default=str, ensure_ascii=False, indent=2))
+            tools_sha256=hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()), default=str, ensure_ascii=False, indent=2))
         if progress:
             progress("读取DataProxy原生材料")
         corpus = read_parsed_document_bundle(task.bundle_path)
         source = SourceView(corpus, document_id=task.document_id, source_file=task.source_file)
         source.check_refs(task.source_refs)
-        editor = DocxEditor(task.template_path, output_dir / "working.docx", source.asset_path)
+        editor = (XlsxEditor if suffix == ".xlsx" else DocxEditor)(task.template_path, output_dir / ("working" + suffix), source.asset_path)
         previewer = previewer or Previewer(output_dir / "previews", config, deadline=deadline)
         if progress:
             progress("生成模板预览")
@@ -69,10 +72,11 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         agent_result = run_agent(client, messages, runtime, config, trace_path, deadline, progress, review_input=initial)
         unchanged = hashlib.sha256(editor.template.read_bytes()).hexdigest() == editor.original_hash
         with zipfile.ZipFile(editor.template) as before, zipfile.ZipFile(editor.output) as after:
-            changed_parts = [n for n in before.namelist() if before.read(n) != after.read(n)]
+            changed_parts = [n for n in sorted(set(before.namelist()) | set(after.namelist()))
+                             if n not in before.namelist() or n not in after.namelist() or before.read(n) != after.read(n)]
         if not unchanged:
             raise ValueError("Template changed during conversion")
-        final = output_dir / "result.docx"
+        final = output_dir / ("result" + suffix)
         os.replace(editor.output, final)
         result.execution_status, result.output_path = "completed", str(final)
         self_check = agent_result["editor_self_check"]
@@ -82,8 +86,10 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         if not editor.applied_batches:
             result.issues.append(dict(kind="no_changes", message="Editor made no changes; confirm that unchanged output is intended"))
         needs_review = bool(result.issues)
-        # Phase 1 does not pretend an editor's own finish response is independent review.
+        # An editor's own finish response is not independent review.
         result.review_status = "needs_review" if needs_review else "not_run"
+        if suffix == ".xlsx":
+            report["formula_check"] = "Unmodified formulas preserved; copied formulas translated; workbook recalculates on open. No independent cached-value verification."
         report.update(agent_result, template_unchanged=True, changed_package_parts=changed_parts,
                       output_sha256=hashlib.sha256(final.read_bytes()).hexdigest(),
                       output_pages=[str(p) for p in runtime.output_pages],

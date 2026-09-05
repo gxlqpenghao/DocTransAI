@@ -8,7 +8,6 @@ import time
 
 import httpx
 
-from doctransai.tools import TOOLS
 from doctransai.documents.preview import image_part
 
 
@@ -30,7 +29,7 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
         for attempt in range(2):
             start = time.monotonic()
             try:
-                response = client.chat(messages, TOOLS, stream=True, deadline=deadline)
+                response = client.chat(messages, runtime.tools, stream=True, deadline=deadline)
                 break
             except Exception as exc:
                 # Retrying a request is safe before ANY returned tool is executed.
