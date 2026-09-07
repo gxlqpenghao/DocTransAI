@@ -162,6 +162,7 @@ class SourceView:
         self.check_refs(primary_refs)
         selected: list[str] = []
         primary_rows: set[int] = set()
+        primary_sheets: set[str] = set()
 
         def visit(value):
             nonlocal primary_rows
@@ -169,6 +170,8 @@ class SourceView:
                 for key, child in value.items():
                     if key in ("cell_range", "range", "range_text", "cell_anchor"):
                         primary_rows.update(self._range_rows(child))
+                    if key in ("sheet_name", "worksheet_name") and isinstance(child, str):
+                        primary_sheets.add(child)
                     if key == "asset_refs" and isinstance(child, list):
                         for ref in child:
                             if ref in self.assets and ref not in selected:
@@ -184,12 +187,13 @@ class SourceView:
         if primary_rows:
             for ref, row in self.assets.items():
                 anchor = row.get("cell_anchor")
-                if anchor and self._range_rows(anchor) & primary_rows and ref not in selected:
+                if (anchor and self._range_rows(anchor) & primary_rows and
+                        (not primary_sheets or row.get("sheet_name") in primary_sheets) and ref not in selected):
                     selected.append(ref)
 
         if not primary_refs and len(self.assets) <= max_assets:
             selected.extend(ref for ref in self.assets if ref not in selected)
-        elif len(selected) < max_assets:
+        elif not primary_refs and len(selected) < max_assets:
             # A short source with no explicit asset refs should still expose
             # its complete native image set; large sets remain on-demand.
             for ref in self.assets:

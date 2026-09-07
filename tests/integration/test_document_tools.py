@@ -53,6 +53,19 @@ def test_primary_source_refs_are_first_class_initial_context(tmp_path):
     assert initial['evidence'][0]['evidence_id'] == 'ev1'
 
 
+def test_primary_asset_preparation_does_not_mix_workbooks_or_sheets(tmp_path):
+    corpus, _, _ = material(tmp_path)
+    corpus.evidence_units.append(dict(
+        document_id='doc1', evidence_id='row-primary', text='Sheet=Sheet0 | Range=A6:X6',
+        locator={'cell_range': 'A6:X6', 'sheet_name': 'Sheet0'}))
+    corpus.visual_assets.extend([
+        dict(corpus.visual_assets[0], asset_id='same-row-sheet0', cell_anchor='K6', sheet_name='Sheet0'),
+        dict(corpus.visual_assets[0], asset_id='same-row-sheet1', cell_anchor='K6', sheet_name='Sheet1'),
+    ])
+    view = SourceView(corpus)
+    assert view.initial_asset_refs(['row-primary']) == ['same-row-sheet0']
+
+
 def test_source_document_selection_is_not_implicit_for_multiple_documents(tmp_path):
     corpus, _, _ = material(tmp_path)
     corpus.documents.append(dict(document_id="doc2", source_path="/other.docx"))
