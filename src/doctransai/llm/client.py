@@ -16,6 +16,7 @@ DOCTRANSAI_LLM_MODEL_ENV = "DOCTRANSAI_LLM_MODEL"
 DOCTRANSAI_LLM_TIMEOUT_SECONDS_ENV = "DOCTRANSAI_LLM_TIMEOUT_SECONDS"
 DOCTRANSAI_LLM_MAX_TOKENS_ENV = "DOCTRANSAI_LLM_MAX_TOKENS"
 DOCTRANSAI_LLM_TEMPERATURE_ENV = "DOCTRANSAI_LLM_TEMPERATURE"
+DOCTRANSAI_LLM_REASONING_EFFORT_ENV = "DOCTRANSAI_LLM_REASONING_EFFORT"
 DOCTRANSAI_LLM_MAX_REQUEST_BYTES_ENV = "DOCTRANSAI_LLM_MAX_REQUEST_BYTES"
 DOCTRANSAI_LLM_MAX_INPUT_CHARS_ENV = "DOCTRANSAI_LLM_MAX_INPUT_CHARS"
 DOCTRANSAI_DATAPROXY_ROOT_ENV = "DOCTRANSAI_DATAPROXY_ROOT"
@@ -23,6 +24,7 @@ DOCTRANSAI_DATAPROXY_ROOT_ENV = "DOCTRANSAI_DATAPROXY_ROOT"
 DEFAULT_DOCTRANSAI_LLM_MODEL = "kimi-k3"
 DEFAULT_DOCTRANSAI_LLM_MAX_REQUEST_BYTES = 6_000_000
 DEFAULT_DOCTRANSAI_LLM_MAX_INPUT_CHARS = 0
+KIMI_K3_REASONING_EFFORTS = ("low", "high", "max")
 
 
 def _default_temperature(model: str) -> float:
@@ -83,6 +85,7 @@ class DoctransaiLLMConfig:
     timeout_seconds: float | None = None
     max_tokens: int | None = None
     temperature: float | None = None
+    reasoning_effort: str | None = None
     max_request_body_bytes: int | None = None
     max_input_chars: int | None = None
     transport: httpx.BaseTransport | None = None
@@ -127,6 +130,16 @@ class DoctransaiLLMClient:
             default=_default_temperature(self.model_name),
             file_fallbacks=file_fallbacks,
         )
+        configured_effort = (resolved.reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV)
+                             or file_fallbacks.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV))
+        if self.model_name.split("/")[-1] == "kimi-k3":
+            self.reasoning_effort = configured_effort or "max"
+            if self.reasoning_effort not in KIMI_K3_REASONING_EFFORTS:
+                raise DoctransaiLLMConfigurationError(
+                    "Kimi K3 reasoning_effort must be one of: low, high, max"
+                )
+        else:
+            self.reasoning_effort = None
         self.max_request_body_bytes = resolve_llm_request_body_limit_bytes(
             resolved.max_request_body_bytes,
             file_fallbacks=file_fallbacks,
@@ -160,6 +173,7 @@ class DoctransaiLLMClient:
             model_name=self.model_name,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
+            reasoning_effort=self.reasoning_effort,
         )
         estimated_request_bytes = estimate_request_body_bytes(payload)
         if (
@@ -219,6 +233,8 @@ class DoctransaiLLMClient:
         payload = dict(model=self.model_name, messages=messages, tools=tools,
                        tool_choice="auto", temperature=self.temperature, max_tokens=self.max_tokens,
                        stream=stream)
+        if self.reasoning_effort is not None:
+            payload["reasoning_effort"] = self.reasoning_effort
         if stream:
             payload["stream_options"] = {"include_usage": True}
         size = estimate_request_body_bytes(payload)
@@ -319,8 +335,9 @@ def build_chat_completions_payload(
     model_name: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "model": model_name or os.environ.get(DOCTRANSAI_LLM_MODEL_ENV) or DEFAULT_DOCTRANSAI_LLM_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -339,6 +356,10 @@ def build_chat_completions_payload(
             default=_default_temperature(model_name or os.environ.get(DOCTRANSAI_LLM_MODEL_ENV) or DEFAULT_DOCTRANSAI_LLM_MODEL),
         ),
     }
+    model = model_name or os.environ.get(DOCTRANSAI_LLM_MODEL_ENV) or DEFAULT_DOCTRANSAI_LLM_MODEL
+    if model.split("/")[-1] == "kimi-k3":
+        payload["reasoning_effort"] = reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV) or "max"
+    return payload
 
 
 def estimate_request_body_bytes(payload: dict[str, Any]) -> int:

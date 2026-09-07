@@ -51,7 +51,7 @@ cp .env.example .env
 uv run doctransai --version
 ```
 
-项目模型固定为 `kimi-k3`，不通过环境变量切换模型。凭证只放在未跟踪的 `.env` 或外部环境变量中；不要把真实 key 写入命令、报告、trace 或 Git。
+项目模型固定为 `kimi-k3`，不通过环境变量切换模型。K3 的思考强度支持 `low`、`high`、`max`，默认 `max`，不能关闭思考；可用 `--reasoning-effort high` 或 `DOCTRANSAI_LLM_REASONING_EFFORT=high` 调整。凭证只放在未跟踪的 `.env` 或外部环境变量中；不要把真实 key 写入命令、报告、trace 或 Git。
 
 DOC/DOCX/PDF 源的页面预览需要可运行的 bundled `render_docx.py`；XLSX 源主要依赖 DataProxy 的 native range、sheet 和图片锚点。产品支持的输出是 DOCX 或 XLSX，不直接编辑 DOC/PDF 模板。
 
@@ -68,6 +68,10 @@ uv run doctransai convert \
   --instruction '依据选定源材料填写模板；缺少依据的内容留空。' \
   --env-file /secure/path/provider.env
 ```
+
+需要降低 K3 思考强度时，在上述命令中增加 `--reasoning-effort low` 或
+`--reasoning-effort high`；降低档位可能减少延迟和 token 消耗，但复杂文档的
+事实/版式判断可能退化。
 
 选定主源对象时可重复使用 `--source-ref`：
 

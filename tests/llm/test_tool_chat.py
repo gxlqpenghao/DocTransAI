@@ -57,6 +57,26 @@ def test_explicit_temperature_is_preserved():
     assert client.temperature == 0.2
 
 
+def test_explicit_kimi_k3_reasoning_effort_is_sent():
+    captured = {}
+
+    def handler(request):
+        captured.update(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = DoctransaiLLMClient(DoctransaiLLMConfig(
+        api_key="test", base_url="https://example.invalid/v1", reasoning_effort="high",
+        transport=httpx.MockTransport(handler)))
+    assert client.generate(system_prompt="sys", user_prompt="usr") == "ok"
+    assert captured["reasoning_effort"] == "high"
+
+
+def test_invalid_kimi_k3_reasoning_effort_is_rejected():
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        DoctransaiLLMClient(DoctransaiLLMConfig(
+            api_key="test", base_url="https://example.invalid/v1", reasoning_effort="medium"))
+
+
 def test_deadline_prevents_request():
     with pytest.raises(TimeoutError):
         client_for(b"").chat([], [], deadline=0)

@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
         convert_parser.add_argument("--source-ref", action="append", default=[])
         convert_parser.add_argument("--env-file", type=Path)
         convert_parser.add_argument("--model", help="Compatibility option; only kimi-k3 is supported")
+        convert_parser.add_argument("--reasoning-effort", choices=("low", "high", "max"),
+                                    help="Kimi K3 thinking effort; default is max")
         convert_parser.add_argument("--max-steps", type=int, default=12)
         convert_parser.add_argument("--review-max-steps", type=int, default=6)
         convert_parser.add_argument("--repair-max-steps", type=int, default=4)
@@ -50,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             if explicit_review and getattr(args, "skip_review", False):
                 raise ValueError("--review and --skip-review cannot be used together")
             config = RuntimeConfig.from_environment(env_file=args.env_file, model=args.model,
+                    reasoning_effort=args.reasoning_effort,
                     review_enabled=explicit_review, review_max_steps=args.review_max_steps,
                     repair_max_steps=args.repair_max_steps, max_repair_rounds=args.max_repair_rounds,
                     max_steps=args.max_steps, max_seconds=args.timeout_seconds,

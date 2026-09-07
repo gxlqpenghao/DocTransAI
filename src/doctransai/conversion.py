@@ -37,7 +37,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
     trace_path = output_dir / "trace.jsonl"
     result = ConversionResult("failed", "not_run", None, str(report_path))
     report = dict(product_version=__version__, workflow="document-tools-v1",
-                  task=asdict(task), model=config.model, independent_semantic_review="not_run")
+                  task=asdict(task), model=config.model, reasoning_effort=config.reasoning_effort,
+                  independent_semantic_review="not_run")
     editor = None
     final = None
     try:
@@ -121,10 +122,11 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         runtime = ToolRuntime(source, editor, previewer)
         runtime.prepared_source_images = prepared_source_image_paths
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
-                model_name=config.model, max_tokens=config.max_output_tokens))
+                model_name=config.model, max_tokens=config.max_output_tokens,
+                reasoning_effort=config.reasoning_effort))
         report["model"] = getattr(client, "model_name", config.model)
         report["llm_settings"] = {key: getattr(client, key, None) for key in
-                                  ("model_name", "temperature", "max_tokens", "timeout_seconds")}
+                                  ("model_name", "temperature", "max_tokens", "timeout_seconds", "reasoning_effort")}
         agent_result = run_agent(client, messages, runtime, config, trace_path, deadline, progress, review_input=initial) if existing_document is None else {}
         if config.review_enabled:
             independent = review_and_repair(source, editor, previewer, initial, client, config, output_dir, deadline, progress)
