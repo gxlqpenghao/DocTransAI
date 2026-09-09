@@ -24,7 +24,7 @@ dev = [
 package = true
 
 [tool.setuptools.package-data]
-doctransai = ["prompts/*.md"]
+doctransai = ["prompts/*.md", "data_layer/contracts/*.json"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"

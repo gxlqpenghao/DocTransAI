@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 import sys
@@ -13,6 +14,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="doctransai")
     parser.add_argument("--version", action="store_true", help="Print the DocTransAI version.")
     commands = parser.add_subparsers(dest="command")
+    parse_parser = commands.add_parser("parse", help="Upload a source to the DataProxy service and validate its package")
+    parse_parser.add_argument("--source-file", type=Path, required=True)
+    parse_parser.add_argument("--output-dir", type=Path, required=True)
+    parse_parser.add_argument("--base-url", default=os.environ.get("DOCTRANSAI_DATAPROXY_BASE_URL"))
+    parse_parser.add_argument("--idempotency-key")
+    parse_parser.add_argument("--timeout-seconds", type=float, default=900)
     for command in ("convert", "review"):
         convert_parser = commands.add_parser(command, help="Convert materials or independently review an existing output.")
         if command == "review":
@@ -43,6 +50,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.version:
         print(f"doctransai {__version__}")
         return 0
+    if args.command == "parse":
+        from doctransai.upstream.dataproxy.client import fetch_parse_artifact
+        try:
+            if not args.base_url:
+                raise ValueError("Set --base-url or DOCTRANSAI_DATAPROXY_BASE_URL")
+            manifest = fetch_parse_artifact(args.source_file, args.output_dir, base_url=args.base_url,
+                api_key=os.environ.get("DOCTRANSAI_DATAPROXY_API_KEY", ""),
+                idempotency_key=args.idempotency_key, timeout=args.timeout_seconds)
+            print(json.dumps({"manifest": str(manifest)}, ensure_ascii=False))
+            return 0
+        except Exception as exc:
+            secret = os.environ.get("DOCTRANSAI_DATAPROXY_API_KEY", "")
+            message = str(exc).replace(secret, "<redacted>") if secret else str(exc)
+            print(message, file=sys.stderr)
+            return 1
     if args.command in ("convert", "review"):
         from doctransai.config import RuntimeConfig
         from doctransai.conversion import convert

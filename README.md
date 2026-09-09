@@ -141,3 +141,41 @@ DOCX 支持文本范围/匹配替换、列表、段落组、表格行组和图�
 - 完整源码目录安装已支持；standalone wheel 暂不支持。
 - `V1文档审核集/`、历史报告和部分旧兼容代码仍在仓库中。它们是否可以公开到 GitHub 需要用户确认，当前不宣称样本、素材或报告具有公开许可。
 - 上传前应重新检查跟踪文件中的样本、个人信息、许可和外部路径；本轮不会替用户改变许可或删除原始材料。
+
+## DataProxy 正式解析包接入
+
+支持外层 `parse_artifact`、内层 `data_asset_pack`，所有资源以 ZIP 根目录
+`package_root` 为基准。旧 `data_asset_pack_v0` 本地 bundle 入口保留供历史任务使用；
+这不代表 DataProxy 提供两套正式服务契约。
+
+通过服务取得包（当前 DataProxy 对外 HTTPS 尚待部署验收）：
+
+```bash
+export DOCTRANSAI_DATAPROXY_BASE_URL='https://your-dataproxy-host'
+export DOCTRANSAI_DATAPROXY_API_KEY='<项目密钥>'
+uv run doctransai parse --source-file ./source.pdf --output-dir ./runs/parse-001
+```
+
+客户端仅允许 HTTPS 或本机回环 HTTP；不依赖 SSH。`parse-request.json` 在上传前保存
+幂等键，并在取得任务后保存 job_id，不保存 API Key。失败后如需重新提交同一逻辑请求，
+在新输出目录中用 `--idempotency-key` 复用原值；客户端不会自动重放上传。默认等待预算
+900 秒，单次网络 I/O 超时最多 30 秒；下载最多 1 GiB，解压总大小最多 1 GiB、文件数最多 20000。
+HTTP 错误、未知状态、任务失败、质量 failed 或哈希不符均停止。
+
+消费已下载 ZIP、解压目录或 manifest：
+
+```bash
+uv run doctransai convert \
+  --bundle ./runs/parse-001/package/manifest.json \
+  --template ./template.docx \
+  --output-dir ./runs/convert-001 \
+  --instruction '依据材料填写模板，无依据内容留空，保留既有有效内容。' \
+  --env-file ./provider.env
+```
+
+源文件可直接取包内副本，无需服务器路径。质量 degraded 的警告会进入模型材料及
+转换报告；质量 failed 不进入填写流程。转换输出不代表上游解析或业务事实认证。
+
+**2026-09-09 联调边界**：远端 `9ee3749` 的新 TXT 包通过外层、路径和哈希验证，
+但 evidence_units 实际包含其正式 schema 禁止的字段，严格消费因此失败。
+需 DataProxy 修正 schema/产物一致性后再做真实转换验收；没有为通过测试静默删字段或放宽校验。

@@ -35,7 +35,12 @@ class SourceView:
         if len(matches) != 1:
             raise ValueError("Select exactly one source document with --document-id or --source-file")
         self.document = matches[0]
-        self.source_file = source_file or Path(self.document["source_path"]).expanduser().resolve()
+        if corpus.resource_root is not None:
+            from .artifact import package_path
+            packaged_source = package_path(corpus.resource_root, self.document["source_path"])
+            self.source_file = source_file or packaged_source
+        else:
+            self.source_file = source_file or Path(self.document["source_path"]).expanduser().resolve()
         self.objects: dict[str, dict[str, Any]] = {}
         self.assets: dict[str, dict[str, Any]] = {}
         self.evidence: list[dict[str, Any]] = []
@@ -78,7 +83,11 @@ class SourceView:
         row = self.assets[ref]
         if not row.get("source_ref"):
             raise ValueError(f"Image has no source_ref: {ref}")
-        path = Path(row["source_ref"]).expanduser()
+        if self.corpus.resource_root is not None:
+            from .artifact import package_path
+            path = package_path(self.corpus.resource_root, row["source_ref"])
+        else:
+            path = Path(row["source_ref"]).expanduser()
         if path.is_absolute():
             candidates = [path]
         else:

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/data_quality_report.schema.json",
+  "title": "DataProxy Evidence Contract Quality Report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "contract_version",
+    "generated_at",
+    "summary"
+  ],
+  "anyOf": [
+    {
+      "required": ["decision", "metrics", "blocking_issues", "warning_issues", "samples"]
+    },
+    {
+      "required": ["issues", "issue_buckets"]
+    }
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack"},
+    "generated_at": {"type": ["string", "null"]},
+    "decision": {"enum": ["pass", "warning", "blocking"]},
+    "summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["document_count", "evidence_count", "section_count"],
+      "properties": {
+        "document_count": {"type": "integer", "minimum": 0},
+        "evidence_count": {"type": "integer", "minimum": 0},
+        "section_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {"type": ["number", "integer", "object", "array", "null"]},
+      "required": [
+        "document_count",
+        "evidence_count",
+        "section_count",
+        "page_role_coverage",
+        "title_path_coverage",
+        "locator_coverage",
+        "source_lineage_coverage",
+        "short_evidence_ratio_by_kind",
+        "toc_line_evidence_count",
+        "cover_fragment_count",
+        "chunk_sequence_error_count",
+        "projection_consistency_rate",
+        "milvus_filter_field_coverage",
+        "api_contract_coverage",
+        "sheet_name_coverage",
+        "range_ref_coverage",
+        "cell_range_id_coverage",
+        "xlsx_parser_signal_coverage",
+        "xlsx_image_anchor_coverage",
+        "visual_asset_ref_coverage",
+        "evidence_visual_link_coverage",
+        "table_atomicity_coverage",
+        "table_evidence_backref_coverage"
+      ],
+      "properties": {
+        "document_count": {"type": "integer", "minimum": 0},
+        "evidence_count": {"type": "integer", "minimum": 0},
+        "section_count": {"type": "integer", "minimum": 0},
+        "page_role_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "title_path_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "locator_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "source_lineage_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "short_evidence_ratio_by_kind": {"type": "object", "additionalProperties": {"type": "number"}},
+        "toc_line_evidence_count": {"type": "integer", "minimum": 0},
+        "cover_fragment_count": {"type": "integer", "minimum": 0},
+        "chunk_sequence_error_count": {"type": "integer", "minimum": 0},
+        "projection_consistency_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "milvus_filter_field_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "api_contract_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "sheet_name_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "range_ref_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "cell_range_id_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "xlsx_parser_signal_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "xlsx_image_anchor_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "visual_asset_ref_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_visual_link_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "table_atomicity_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "table_evidence_backref_coverage": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "blocking_issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "warning_issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "samples": {"type": "array", "items": {"type": "object", "additionalProperties": true}}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "document_id": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "field": {"type": ["string", "null"]},
+        "severity": {"enum": ["blocking", "warning", "info"]}
+      }
+    }
+  }
+}

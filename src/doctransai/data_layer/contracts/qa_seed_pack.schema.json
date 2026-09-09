@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/qa_seed_pack.schema.json",
+  "title": "DataProxy QA Seed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "qa_id",
+    "question",
+    "answer",
+    "evidence_ids",
+    "asset_refs",
+    "locator",
+    "source_path",
+    "qa_type",
+    "requires_visual_context",
+    "generator",
+    "validation",
+    "review_status"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "data_asset_pack"
+    },
+    "qa_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string"
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "asset_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "source_path": {
+      "type": ["string", "null"]
+    },
+    "qa_type": {
+      "enum": ["factoid", "summary", "table_cell", "table_row_summary", "section_summary"]
+    },
+    "requires_visual_context": {
+      "type": "boolean"
+    },
+    "generator": {
+      "enum": ["dataproxy", "dataflow", "manual"]
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grounded",
+        "answer_supported_by_evidence",
+        "locator_resolvable",
+        "issues"
+      ],
+      "properties": {
+        "grounded": {"type": "boolean"},
+        "answer_supported_by_evidence": {"type": "boolean"},
+        "locator_resolvable": {"type": "boolean"},
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/issue"}
+        }
+      }
+    },
+    "review_status": {
+      "enum": ["unreviewed", "accepted", "rejected"]
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["info", "warning", "error"]
+    },
+    "issue_code": {
+      "enum": [
+        "missing_document_id",
+        "missing_source_path",
+        "missing_source_checksum",
+        "empty_text",
+        "missing_locator",
+        "invalid_char_range",
+        "duplicate_evidence_text",
+        "orphan_evidence",
+        "table_empty",
+        "table_missing_title",
+        "section_missing_title",
+        "section_level_anomaly",
+        "parser_signals_missing",
+        "source_truth_mismatch",
+        "visual_asset_unregistered",
+        "asset_unlinked",
+        "referenced_asset_missing",
+        "visual_asset_nearby",
+        "visual_context_required",
+        "image_text_not_extracted",
+        "chart_or_diagram_not_parsed",
+        "scanned_page_text_low_confidence",
+        "qa_answer_unsupported",
+        "qa_answer_granularity_mismatch",
+        "qa_locator_unresolvable",
+        "qa_question_low_quality",
+        "qa_visual_context_unmarked",
+        "export_contract_violation"
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": {"$ref": "#/$defs/issue_code"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "message": {"type": "string"},
+        "field": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "asset_id": {"type": ["string", "null"]},
+        "qa_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

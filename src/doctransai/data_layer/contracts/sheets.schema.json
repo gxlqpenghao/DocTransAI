@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/sheets.schema.json",
+  "title": "DataProxy Sheet Inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "sheet_id",
+    "document_id",
+    "source_path",
+    "sheet_name",
+    "sheet_index",
+    "sheet_summary",
+    "parser_signals",
+    "quality"
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack"},
+    "sheet_id": {"type": "string", "minLength": 1},
+    "document_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "sheet_name": {"type": "string", "minLength": 1},
+    "sheet_index": {"type": "integer", "minimum": 0},
+    "sheet_summary": {"type": "string"},
+    "parser_signals": {"type": "object"},
+    "quality": {"$ref": "#/$defs/quality"}
+  },
+  "$defs": {
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    }
+  }
+}

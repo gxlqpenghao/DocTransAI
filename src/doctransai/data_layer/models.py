@@ -27,6 +27,8 @@ class SourceCorpus:
     components: dict[str, ComponentFile]
     reports: dict[str, Path]
     raw_manifest: JsonObject
+    resource_root: Path | None = None
+    artifact_manifest: JsonObject | None = None
 
     def component(self, name: str) -> ComponentFile:
         try:

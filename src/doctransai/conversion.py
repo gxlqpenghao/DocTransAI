@@ -14,6 +14,7 @@ from doctransai.agent import append_event, run_agent
 from doctransai import __version__
 from doctransai.config import RuntimeConfig
 from doctransai.data_layer import read_parsed_document_bundle
+from doctransai.data_layer.artifact import read_source_input
 from doctransai.data_layer.view import SourceView
 from doctransai.documents.docx import DocxEditor
 from doctransai.documents.xlsx import XlsxEditor
@@ -61,7 +62,11 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             tools_sha256=hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()), default=str, ensure_ascii=False, indent=2))
         if progress:
             progress("读取DataProxy原生材料")
-        corpus = read_parsed_document_bundle(task.bundle_path)
+        corpus = (read_source_input(task.bundle_path, output_dir)
+                  if task.bundle_path.is_dir() or task.bundle_path.name == "manifest.json" or task.bundle_path.suffix.lower() == ".zip"
+                  else read_parsed_document_bundle(task.bundle_path))
+        if corpus.artifact_manifest:
+            report["parse_artifact"] = {k: corpus.artifact_manifest[k] for k in ("contract_version", "job_id", "quality")}
         source = SourceView(corpus, document_id=task.document_id, source_file=task.source_file)
         source.check_refs(task.source_refs)
         editor = (XlsxEditor if suffix == ".xlsx" else DocxEditor)(existing_document or task.template_path, output_dir / ("working" + suffix), source.asset_path)
@@ -86,6 +91,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         template_pages = previewer.render(task.template_path) if existing_document is None else []
         prep_started = time.monotonic()
         initial_source = source.initial(config.initial_source_chars, primary_refs=task.source_refs)
+        if corpus.artifact_manifest:
+            initial_source["parse_quality"] = corpus.artifact_manifest["quality"]
         prepared_asset_refs = source.initial_asset_refs(task.source_refs, max_assets=config.initial_source_assets)
         initial_source["prepared_asset_refs"] = prepared_asset_refs
         initial_source["prepared_asset_count"] = len(prepared_asset_refs)

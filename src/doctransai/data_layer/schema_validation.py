@@ -52,7 +52,12 @@ def _validator_for_schema(schema_path: str) -> Draft202012Validator:
 
 
 def validate_instance(component_name: str, instance: dict[str, Any]) -> None:
-    schema_path = schema_for_component(component_name)
+    if instance.get("contract_version") == "data_asset_pack":
+        schema_path = Path(__file__).parent / "contracts" / f"{component_name}.schema.json"
+        if not schema_path.is_file():
+            raise FileNotFoundError(f"Missing contract: {component_name}")
+    else:
+        schema_path = schema_for_component(component_name)
     if schema_path is None:
         return
 

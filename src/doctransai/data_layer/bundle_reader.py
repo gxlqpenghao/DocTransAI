@@ -34,6 +34,7 @@ def read_parsed_document_bundle(
     *,
     validate: bool = True,
     component_names: set[str] | None = None,
+    resource_root: Path | None = None,
 ) -> SourceCorpus:
     path = Path(bundle_path).expanduser().resolve()
     manifest = _read_json(path)
@@ -41,8 +42,10 @@ def read_parsed_document_bundle(
     if validate:
         _validate("parsed_document_bundle", "parsed_document_bundle", manifest)
 
-    bundle_dir = path.parent
+    bundle_dir = resource_root.resolve() if resource_root else path.parent
     selected_components = DEFAULT_COMPONENT_NAMES if component_names is None else set(component_names)
+    if manifest.get("contract_version") not in {"data_asset_pack", "data_asset_pack_v0"}:
+        raise BundleValidationError("Unsupported DataProxy contract")
     components = _read_components(bundle_dir, manifest, validate=validate, component_names=selected_components)
     reports = {
         report_name: _resolve_bundle_path(bundle_dir, report_path)
@@ -59,6 +62,7 @@ def read_parsed_document_bundle(
         components=components,
         reports=reports,
         raw_manifest=manifest,
+        resource_root=resource_root,
     )
 
 
@@ -85,6 +89,8 @@ def _read_components(
 
         if validate:
             for index, record in enumerate(records):
+                if record.get("contract_version") != manifest["contract_version"]:
+                    raise BundleValidationError(f"{component_name}: mixed component contract versions")
                 _validate(component_name, f"{component_name}[{index}]", record)
 
         components[component_name] = ComponentFile(

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/source_manifest.schema.json",
+  "title": "DataProxy Source Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "document_id",
+    "source_path",
+    "source_checksum",
+    "document_title",
+    "doc_type",
+    "source_file_id"
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack"},
+    "document_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "source_checksum": {"type": ["string", "null"]},
+    "document_title": {"type": "string"},
+    "doc_type": {"type": "string"},
+    "source_file_id": {"type": ["string", "null"]}
+  }
+}
