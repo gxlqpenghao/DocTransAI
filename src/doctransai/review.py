@@ -190,6 +190,8 @@ def review_and_repair(source, editor, previewer, initial, client, config, output
     history=[]
     for round_number in range(config.max_repair_rounds+1):
         phase=f'review-{round_number}'
+        diagnostics=getattr(client,'diagnostics',None)
+        if diagnostics is not None:diagnostics.current_phase=phase
         if progress:progress(f'独立复核 {round_number + 1}')
         try:
             review=run_review(source,editor,previewer,initial,client,config,output_dir/f'{phase}.jsonl',deadline,progress)
@@ -217,6 +219,7 @@ def review_and_repair(source, editor, previewer, initial, client, config, output
             repair_rule='Only repair these findings at authorized targets. Preserve other facts and structure. Do not invent missing evidence. Preview all output pages and finish; another independent review decides acceptance.')
         messages=[dict(role='system',content=prompt),dict(role='user',content=json.dumps(instruction,ensure_ascii=False))]
         version=editor.version
+        if diagnostics is not None:diagnostics.current_phase=f'repair-{round_number+1}'
         try:
             run_agent(client,messages,runtime,replace(config,max_steps=config.repair_max_steps),
                       output_dir/f'repair-{round_number+1}.jsonl',deadline,progress)

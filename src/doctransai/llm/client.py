@@ -90,6 +90,7 @@ class DoctransaiLLMConfig:
     max_input_chars: int | None = None
     transport: httpx.BaseTransport | None = None
     env_file: Path | None = None
+    diagnostics: Any = None  # optional ModelDiagnostics recorder; observation only
 
 
 class DoctransaiLLMClient:
@@ -149,6 +150,7 @@ class DoctransaiLLMClient:
             file_fallbacks=file_fallbacks,
         )
         self.transport = resolved.transport
+        self.diagnostics = resolved.diagnostics
 
         if not self.api_key:
             raise DoctransaiLLMConfigurationError(
@@ -230,6 +232,22 @@ class DoctransaiLLMClient:
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
              stream: bool = True, deadline: float | None = None) -> dict[str, Any]:
         """One model request. No automatic retries or tool execution here."""
+        recorder = getattr(self, "diagnostics", None)
+        handle = None
+        if recorder is not None:
+            handle = recorder.begin_request(messages=messages, tools=tools,
+                                            model=self.model_name, stream=stream)
+        try:
+            return self._chat_inner(messages, tools, stream=stream, deadline=deadline, handle=handle)
+        except Exception as exc:
+            # _chat_inner already records failures with partial stream data;
+            # this covers errors raised before the stream loop was entered.
+            if handle is not None:
+                handle.fail(exc)
+            raise
+
+    def _chat_inner(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
+                    stream: bool, deadline: float | None, handle) -> dict[str, Any]:
         payload = dict(model=self.model_name, messages=messages, tools=tools,
                        tool_choice="auto", temperature=self.temperature, max_tokens=self.max_tokens,
                        stream=stream)
@@ -262,54 +280,80 @@ class DoctransaiLLMClient:
                     message = choice.get("message", {})
                     if message.get("role") != "assistant":
                         raise DoctransaiLLMResponseError("Missing assistant message")
-                    return dict(message=message, usage=body.get("usage"), model=body.get("model", self.model_name))
+                    result = dict(message=message, usage=body.get("usage"), model=body.get("model", self.model_name))
+                    if handle is not None:
+                        handle.complete(message=message, usage=body.get("usage"), model=body.get("model", self.model_name))
+                        result["_diagnostics_request_id"] = handle.request_id
+                    return result
                 message: dict[str, Any] = {"role": "assistant", "content": ""}
                 calls: dict[int, dict[str, Any]] = {}
                 usage, finish_reason, done = None, None, False
                 returned_model = self.model_name
-                for line in response.iter_lines():
-                    if deadline is not None and time.monotonic() >= deadline:
-                        raise TimeoutError("Conversion time budget exhausted during model stream")
-                    if not line.startswith("data:"):
-                        continue
-                    raw = line[5:].strip()
-                    if raw == "[DONE]":
-                        done = True
-                        break
-                    try:
-                        event = json.loads(raw)
-                    except json.JSONDecodeError as exc:
-                        raise DoctransaiLLMResponseError("Invalid stream event") from exc
-                    if "error" in event:
-                        error = event["error"]
-                        code = str(error.get("code", "unknown")) if isinstance(error, dict) else "unknown"
-                        detail = str(error.get("message", "")) if isinstance(error, dict) else str(error)
-                        detail = detail.replace(self.api_key, "<redacted>")[:800]
-                        transient = code.startswith(("InternalError", "ServiceUnavailable", "Throttling"))
-                        raise DoctransaiLLMResponseError(f"Provider stream error {code}: {detail}", retryable=transient)
-                    returned_model = event.get("model", returned_model)
-                    if event.get("usage") is not None:
-                        usage = event["usage"]
-                    for choice in event.get("choices", []):
-                        if choice.get("index", 0) != 0:
+                try:
+                    for line in response.iter_lines():
+                        if deadline is not None and time.monotonic() >= deadline:
+                            raise TimeoutError("Conversion time budget exhausted during model stream")
+                        if not line.startswith("data:"):
                             continue
-                        finish_reason = choice.get("finish_reason") or finish_reason
-                        delta = choice.get("delta", {})
-                        for key in ("content", "reasoning_content"):
-                            if delta.get(key):
-                                message[key] = message.get(key, "") + delta[key]
-                        for fragment in delta.get("tool_calls", []):
-                            call = calls.setdefault(fragment["index"], {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-                            if fragment.get("id"):
-                                call["id"] = fragment["id"]
-                            for key in ("name", "arguments"):
-                                call["function"][key] += fragment.get("function", {}).get(key) or ""
+                        raw = line[5:].strip()
+                        if raw == "[DONE]":
+                            done = True
+                            break
+                        try:
+                            event = json.loads(raw)
+                        except json.JSONDecodeError as exc:
+                            raise DoctransaiLLMResponseError("Invalid stream event") from exc
+                        if "error" in event:
+                            error = event["error"]
+                            code = str(error.get("code", "unknown")) if isinstance(error, dict) else "unknown"
+                            detail = str(error.get("message", "")) if isinstance(error, dict) else str(error)
+                            detail = detail.replace(self.api_key, "<redacted>")[:800]
+                            transient = code.startswith(("InternalError", "ServiceUnavailable", "Throttling"))
+                            raise DoctransaiLLMResponseError(f"Provider stream error {code}: {detail}", retryable=transient)
+                        returned_model = event.get("model", returned_model)
+                        if event.get("usage") is not None:
+                            usage = event["usage"]
+                        for choice in event.get("choices", []):
+                            if choice.get("index", 0) != 0:
+                                continue
+                            finish_reason = choice.get("finish_reason") or finish_reason
+                            delta = choice.get("delta", {})
+                            if handle is not None and (any(delta.get(key) for key in ("content", "reasoning_content")) or delta.get("tool_calls")):
+                                handle.mark_stream_event("first_delta")
+                            for key in ("content", "reasoning_content"):
+                                if delta.get(key):
+                                    if handle is not None:
+                                        handle.mark_stream_event("reasoning" if key == "reasoning_content" else key)
+                                    message[key] = message.get(key, "") + delta[key]
+                            for fragment in delta.get("tool_calls", []):
+                                if handle is not None and fragment.get("function", {}).get("arguments"):
+                                    handle.mark_stream_event("tool_args")
+                                call = calls.setdefault(fragment["index"], {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                                if fragment.get("id"):
+                                    call["id"] = fragment["id"]
+                                for key in ("name", "arguments"):
+                                    call["function"][key] += fragment.get("function", {}).get(key) or ""
+                except Exception as exc:
+                    if handle is not None:
+                        handle.fail(exc, partial_message=message, partial_usage=usage)
+                    raise
                 if not done or finish_reason not in ("stop", "tool_calls"):
-                    raise DoctransaiLLMResponseError(f"Incomplete model stream (finish_reason={finish_reason!r})")
+                    error = DoctransaiLLMResponseError(f"Incomplete model stream (finish_reason={finish_reason!r})")
+                    if handle is not None:
+                        handle.fail(error, partial_message=message, partial_usage=usage)
+                    raise error
                 if calls:
                     message["tool_calls"] = [calls[k] for k in sorted(calls)]
                     if any(not c["id"] or not c["function"]["name"] for c in calls.values()):
-                        raise DoctransaiLLMResponseError("Incomplete tool call identity")
+                        error = DoctransaiLLMResponseError("Incomplete tool call identity")
+                        if handle is not None:
+                            handle.fail(error, partial_message=message, partial_usage=usage)
+                        raise error
+                if handle is not None:
+                    handle.complete(message=message, usage=usage, model=returned_model)
+                    result = dict(message=message, usage=usage, model=returned_model)
+                    result["_diagnostics_request_id"] = handle.request_id
+                    return result
                 return dict(message=message, usage=usage, model=returned_model)
 
 

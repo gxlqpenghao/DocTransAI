@@ -131,6 +131,14 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
                 model_name=config.model, max_tokens=config.max_output_tokens,
                 reasoning_effort=config.reasoning_effort))
+        diagnostics = None
+        if config.model_diagnostics:
+            # Local observation only: attaches to the client, records requests,
+            # never alters what is sent, retried, or validated.
+            from doctransai.llm.diagnostics import ModelDiagnostics
+            diagnostics = ModelDiagnostics(output_dir, redact_secrets=[getattr(client, "api_key", "") or ""])
+            client.diagnostics = diagnostics
+            diagnostics.current_phase = "conversion"
         report["model"] = getattr(client, "model_name", config.model)
         report["llm_settings"] = {key: getattr(client, key, None) for key in
                                   ("model_name", "temperature", "max_tokens", "timeout_seconds", "reasoning_effort")}

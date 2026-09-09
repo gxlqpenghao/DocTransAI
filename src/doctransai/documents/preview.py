@@ -16,13 +16,24 @@ from PIL import Image
 from doctransai.config import RuntimeConfig
 
 
+# sha256(re-encoded image bytes sent to the model) -> resolved source file path.
+IMAGE_CONTENT_REGISTRY: dict[str, str] = {}
+
+
 def image_part(path: Path) -> dict:
     with Image.open(path) as img:
         img = img.convert("RGB")
         img.thumbnail((1500, 1800))
         out = BytesIO()
         img.save(out, format="JPEG", quality=85)
-    return {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode()}}
+    content = out.getvalue()
+    # Provenance only: lets optional diagnostics map a request image hash back
+    # to its source file. Pure bookkeeping; never affects the produced part.
+    try:
+        IMAGE_CONTENT_REGISTRY.setdefault(hashlib.sha256(content).hexdigest(), str(Path(path).resolve()))
+    except Exception:
+        pass
+    return {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(content).decode()}}
 
 
 class Previewer:

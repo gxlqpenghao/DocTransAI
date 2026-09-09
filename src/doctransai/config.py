@@ -29,6 +29,8 @@ class RuntimeConfig:
     pdftoppm: str = "pdftoppm"
     render_timeout: float = 120
     render_revision: str = "1"
+    # Optional local model-request diagnostics; observation only, off by default.
+    model_diagnostics: bool = False
 
     def __post_init__(self):
         if not all(math.isfinite(x) for x in (self.max_seconds, self.max_steps, self.review_max_steps, self.repair_max_steps, self.render_timeout, self.max_output_tokens, self.initial_source_chars, self.initial_source_pages, self.initial_source_assets, self.initial_source_max_bytes, self.auto_preview_max_pages)):
@@ -59,6 +61,8 @@ class RuntimeConfig:
                       render_python=os.environ.get("DOCTRANSAI_RENDER_PYTHON", sys.executable),
                       pdftoppm=os.environ.get("DOCTRANSAI_PDFTOPPM", "pdftoppm"),
                       render_revision=os.environ.get("DOCTRANSAI_RENDER_REVISION", "1"),
-                      reasoning_effort=os.environ.get("DOCTRANSAI_LLM_REASONING_EFFORT") or file_effort or "max")
+                      reasoning_effort=os.environ.get("DOCTRANSAI_LLM_REASONING_EFFORT") or file_effort or "max",
+                      model_diagnostics=os.environ.get("DOCTRANSAI_MODEL_DIAGNOSTICS", "").strip().lower()
+                      in ("1", "true", "on", "yes"))
         values.update({k: v for k, v in overrides.items() if v is not None})
         return cls(**values)

@@ -104,6 +104,7 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
         append_event(trace_path, dict(kind="model", step=step, model=response.get("model"), usage=response.get("usage"),
                                      elapsed_seconds=round(time.monotonic() - start, 3),
                                      input_image_count=image_count, input_image_chars=image_chars,
+                                     diagnostics_request_id=response.get("_diagnostics_request_id"),
                                      message={k: v for k, v in message.items() if k != "reasoning_content"}))
         calls.append(response.get("usage"))
         messages.append(message)
@@ -118,11 +119,9 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
                 progress(f"工具：{name}")
             args = None
             tool_started = time.monotonic()
+            version_before = runtime.editor.version
             try:
-                if runtime.finished is not None:
-                    raise ValueError("finish must be the last operation")
                 args = json.loads(call["function"]["arguments"])
-                version_before = runtime.editor.version
                 result, images = runtime.invoke(name, args)
                 pending_images.extend(images)
                 successful = True
@@ -150,6 +149,7 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
                 runtime.output_pages = runtime.previewer.render(runtime.editor.output)
             append_event(trace_path, dict(kind="auto_preview", step=step, version=runtime.editor.version,
                                          page_count=len(runtime.output_pages),
+                                         page_files=[str(p) for p in runtime.output_pages],
                                          elapsed_seconds=round(time.monotonic() - render_started, 3)))
             messages = _checkpoint_after_preview(runtime, review_input, system_message, trace_path, step, config, auto=True)
             checkpoint_version = runtime.editor.version
