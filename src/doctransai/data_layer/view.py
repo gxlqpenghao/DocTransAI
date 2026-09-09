@@ -113,7 +113,7 @@ class SourceView:
                 anchor = value.get("page_anchor")
                 if isinstance(anchor, str):
                     anchors.add(anchor)
-                for asset in value.get("asset_refs", []) or []:
+                for asset in value.get("visual_asset_refs", value.get("asset_refs", [])) or []:
                     if isinstance(asset, str) and asset in self.assets:
                         assets.add(asset)
                 for child in value.values():
@@ -181,7 +181,7 @@ class SourceView:
                         primary_rows.update(self._range_rows(child))
                     if key in ("sheet_name", "worksheet_name") and isinstance(child, str):
                         primary_sheets.add(child)
-                    if key == "asset_refs" and isinstance(child, list):
+                    if key in ("visual_asset_refs", "asset_refs") and isinstance(child, list):
                         for ref in child:
                             if ref in self.assets and ref not in selected:
                                 selected.append(ref)
@@ -224,7 +224,7 @@ class SourceView:
         primary_set = set(primary)
 
         def related(row):
-            refs = {row.get("evidence_id"), row.get("object_id"), *(row.get("asset_refs") or [])}
+            refs = {row.get("evidence_id"), row.get("object_id"), *(row.get("visual_asset_refs", row.get("asset_refs")) or [])}
             return bool(refs & primary_set)
 
         primary_objects, used = [], 0
@@ -242,7 +242,7 @@ class SourceView:
         ordered_evidence = sorted(enumerate(self.evidence), key=lambda pair: (not related(pair[1]), pair[0]))
         evidence = []
         for _, row in ordered_evidence:
-            view = {key: row.get(key) for key in ("evidence_id", "text", "locator", "object_id", "asset_refs")}
+            view = {key: row.get(key) for key in ("evidence_id", "text", "locator", "object_id", "asset_refs", "visual_asset_refs")}
             size = len(json.dumps(view, ensure_ascii=False))
             if used + size <= max_chars:
                 evidence.append(view)

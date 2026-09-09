@@ -87,6 +87,8 @@ def read_artifact(manifest_path: Path):
         if p not in checked:
             raise ValueError(f'Unverified package resource: {name}')
         return p
+    for schema_path in manifest.get("schemas", {}).values():
+        required(schema_path)
     for source in manifest['source']:
         p = required(source['path'])
         if source['sha256'] != _hash(p) or source['size_bytes'] != p.stat().st_size:

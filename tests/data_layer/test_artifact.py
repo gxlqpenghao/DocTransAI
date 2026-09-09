@@ -19,8 +19,13 @@ def make_package(tmp_path):
     (root/'source').mkdir()
     (root/'source/input.txt').write_text('Original /opt/data text')
     schema_dir = Path(__file__).resolve().parents[2]/'src/doctransai/data_layer/contracts'
-    for name in ['parse_artifact_manifest.schema.json','parsed_document_bundle.schema.json']:
-        (root/'schema'/name).write_bytes((schema_dir/name).read_bytes())
+    (root/'schema/data_assets').mkdir()
+    schemas = {}
+    for file in schema_dir.glob('*.json'):
+        relative = ('schema/' if file.name == 'parse_artifact_manifest.schema.json' else 'schema/data_assets/') + file.name
+        (root/relative).write_bytes(file.read_bytes())
+        if file.name != 'parse_artifact_manifest.schema.json':
+            schemas[file.name.removesuffix('.schema.json')] = relative
     digest = hashlib.sha256((root/'source/input.txt').read_bytes()).hexdigest()
     bundle = dict(bundle_type='ParsedDocumentBundle',contract_version='data_asset_pack',database_writes=False,
                   generated_at='2026-09-09',capabilities={},components={},summary={},reports={},issue_buckets={},
@@ -28,8 +33,8 @@ def make_package(tmp_path):
     (root/'content/parsed_document_bundle.json').write_text(json.dumps(bundle))
     files=[dict(path=p.relative_to(root).as_posix(),size_bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.rglob('*') if p.is_file()]
     manifest=dict(artifact_type='DataProxyParseArtifact',contract_version='parse_artifact',job_id='job',project_id='project',created_at='2026-09-09T00:00:00Z',reference_base='package_root',
-        entrypoints={'parsed_document_bundle':dict(path='content/parsed_document_bundle.json',contract_version='data_asset_pack',schema_path='schema/parsed_document_bundle.schema.json',reference_base='package_root')},
-        task=dict(status='succeeded',success=True,failure=None),quality=dict(status='complete',complete=True,summary={},warnings=[],missing_components=[],parse_errors=[]),
+        entrypoints={'parsed_document_bundle':dict(path='content/parsed_document_bundle.json',contract_version='data_asset_pack',schema_path='schema/data_assets/parsed_document_bundle.schema.json',reference_base='package_root')},
+        schemas=schemas,task=dict(status='succeeded',success=True,failure=None),quality=dict(status='complete',complete=True,summary={},warnings=[],missing_components=[],parse_errors=[]),
         source=[dict(path='source/input.txt',original_filename='input.txt',sha256=digest,size_bytes=(root/'source/input.txt').stat().st_size)],components={},integrity=dict(algorithm='sha256',files=files),capabilities={})
     (root/'manifest.json').write_text(json.dumps(manifest))
     archive=tmp_path/'package.zip'

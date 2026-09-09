@@ -436,3 +436,11 @@ def test_post_write_verification_error_never_reports_completed(tmp_path, monkeyp
     assert Path(report['draft_path']).exists()
     assert not (task.output_dir/'result.docx').exists()
     assert Document(report['draft_path']).paragraphs[0].text == 'Example project'
+
+
+def test_formal_visual_refs_are_prepared_and_navigable(tmp_path):
+    corpus, _, _ = material(tmp_path)
+    corpus.evidence_units[0]['visual_asset_refs'] = ['img1']
+    view = SourceView(corpus)
+    assert view.initial_asset_refs(['ev1']) == ['img1']
+    assert view.navigation('ev1')['asset_refs'] == ['img1']
