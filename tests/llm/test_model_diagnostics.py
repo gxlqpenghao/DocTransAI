@@ -160,3 +160,17 @@ def test_credentials_never_appear_in_diagnostics(tmp_path):
             text = path.read_text(encoding="utf-8", errors="ignore")
             assert secret not in text, f"credential leaked into {path}"
             assert "Authorization" not in text
+
+
+def test_default_high_is_sent_without_automatic_escalation(tmp_path, monkeypatch):
+    monkeypatch.delenv('DOCTRANSAI_LLM_REASONING_EFFORT', raising=False)
+    monkeypatch.delenv('DOCTRANSAI_ENV_FILE', raising=False)
+    from doctransai.config import RuntimeConfig
+    assert RuntimeConfig().reasoning_effort == 'high'
+    assert RuntimeConfig.from_environment().reasoning_effort == 'high'
+    assert RuntimeConfig.from_environment(reasoning_effort='max').reasoning_effort == 'max'
+    captured=[]
+    client, recorder = make_client(tmp_path, captured=captured)
+    client.chat([{'role':'user','content':'fill'}], [])
+    client.chat([{'role':'user','content':'check'}], [])
+    assert [p['reasoning_effort'] for p in captured] == ['high', 'high']

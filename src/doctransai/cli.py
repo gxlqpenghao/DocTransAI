@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         convert_parser.add_argument("--env-file", type=Path)
         convert_parser.add_argument("--model", help="Compatibility option; only kimi-k3 is supported")
         convert_parser.add_argument("--reasoning-effort", choices=("low", "high", "max"),
-                                    help="Kimi K3 thinking effort; default is max")
+                                    help="Kimi K3 thinking effort; default is high")
         convert_parser.add_argument("--max-steps", type=int, default=12)
         convert_parser.add_argument("--review-max-steps", type=int, default=6)
         convert_parser.add_argument("--repair-max-steps", type=int, default=4)

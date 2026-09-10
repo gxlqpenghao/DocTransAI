@@ -23,7 +23,7 @@ class RuntimeConfig:
     auto_preview_max_pages: int = 8
     env_file: Path | None = None
     model: str = "kimi-k3"
-    reasoning_effort: str = "max"
+    reasoning_effort: str = "high"
     render_script: Path | None = None
     render_python: str = sys.executable
     pdftoppm: str = "pdftoppm"
@@ -61,7 +61,7 @@ class RuntimeConfig:
                       render_python=os.environ.get("DOCTRANSAI_RENDER_PYTHON", sys.executable),
                       pdftoppm=os.environ.get("DOCTRANSAI_PDFTOPPM", "pdftoppm"),
                       render_revision=os.environ.get("DOCTRANSAI_RENDER_REVISION", "1"),
-                      reasoning_effort=os.environ.get("DOCTRANSAI_LLM_REASONING_EFFORT") or file_effort or "max",
+                      reasoning_effort=os.environ.get("DOCTRANSAI_LLM_REASONING_EFFORT") or file_effort or "high",
                       model_diagnostics=os.environ.get("DOCTRANSAI_MODEL_DIAGNOSTICS", "").strip().lower()
                       in ("1", "true", "on", "yes"))
         values.update({k: v for k, v in overrides.items() if v is not None})

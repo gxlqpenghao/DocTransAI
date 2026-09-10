@@ -134,7 +134,7 @@ class DoctransaiLLMClient:
         configured_effort = (resolved.reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV)
                              or file_fallbacks.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV))
         if self.model_name.split("/")[-1] == "kimi-k3":
-            self.reasoning_effort = configured_effort or "max"
+            self.reasoning_effort = configured_effort or "high"
             if self.reasoning_effort not in KIMI_K3_REASONING_EFFORTS:
                 raise DoctransaiLLMConfigurationError(
                     "Kimi K3 reasoning_effort must be one of: low, high, max"
@@ -402,7 +402,7 @@ def build_chat_completions_payload(
     }
     model = model_name or os.environ.get(DOCTRANSAI_LLM_MODEL_ENV) or DEFAULT_DOCTRANSAI_LLM_MODEL
     if model.split("/")[-1] == "kimi-k3":
-        payload["reasoning_effort"] = reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV) or "max"
+        payload["reasoning_effort"] = reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV) or "high"
     return payload
 
 

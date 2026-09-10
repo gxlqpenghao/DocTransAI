@@ -51,7 +51,7 @@ cp .env.example .env
 uv run doctransai --version
 ```
 
-项目模型固定为 `kimi-k3`，不通过环境变量切换模型。K3 的思考强度支持 `low`、`high`、`max`，默认 `max`，不能关闭思考；可用 `--reasoning-effort high` 或 `DOCTRANSAI_LLM_REASONING_EFFORT=high` 调整。凭证只放在未跟踪的 `.env` 或外部环境变量中；不要把真实 key 写入命令、报告、trace 或 Git。
+项目模型固定为 `kimi-k3`，不通过环境变量切换模型。K3 的思考强度支持 `low`、`high`、`max`，默认 `high`，不能关闭思考；可用 `--reasoning-effort high` 或 `DOCTRANSAI_LLM_REASONING_EFFORT=high` 调整。凭证只放在未跟踪的 `.env` 或外部环境变量中；不要把真实 key 写入命令、报告、trace 或 Git。
 
 DOC/DOCX/PDF 源的页面预览需要可运行的 bundled `render_docx.py`；XLSX 源主要依赖 DataProxy 的 native range、sheet 和图片锚点。产品支持的输出是 DOCX 或 XLSX，不直接编辑 DOC/PDF 模板。
 
@@ -185,3 +185,8 @@ uv run doctransai convert \
 保留原有会话、自动预览和完成检查流程，新增可选 DOCX `replace_ranges`：同段多个非重叠区间的坐标和样式索引取自该操作开始时的同一快照，避免前一处替换长度改变后续位置。旧批内操作仍按顺序执行，失败整批回滚。编辑回执包含输入/输出版本与回滚标记；段落视图提前说明整段替换保护；失败报告的 `last_preview` 保存最后预览版本、文件路径、页数及是否对应当前草稿。未知页数为 null。
 
 这些是通用工具与可追溯性改进，不是已证实的速度优化。代表验证和保留范围见 `docs/v1-tool-hardening-20260910.md`。
+
+
+### high 档的通用质量要求
+
+普通编辑及其自检默认全程使用 `high`，不自动升级到 `max`，不增加复核调用。显式参数或环境配置仍可覆盖默认值；运行报告记录实际档位。填写原则统一要求保留来源精度、区分角色与事实状态、覆盖模板明确要求的属性；不写样本字段映射。已知缺项留空并报告，不能以歧义声明为无依据填写背书。本次原则协调的语义效果尚待模型验证。
