@@ -117,6 +117,7 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
             name = call["function"]["name"]
             if progress:
                 progress(f"工具：{name}")
+            tool_exception = None
             args = None
             tool_started = time.monotonic()
             version_before = runtime.editor.version
@@ -130,11 +131,17 @@ def run_agent(client, messages, runtime, config, trace_path: Path, deadline: flo
                 location = "/".join(str(p) for p in exc.absolute_path) or "root"
                 result, images, successful = dict(error="ValidationError", message=f"Invalid arguments at {location} ({exc.validator}): {exc.message[:700]}"), [], False
             except (ValueError, KeyError, TypeError, OSError) as exc:
+                tool_exception = exc
                 result, images, successful = dict(error=type(exc).__name__, message=str(exc)[:1500]), [], False
             except Exception as exc:
                 # JSON Schema errors and renderer errors are recoverable tool feedback,
                 # but never expose a giant schema or image payload in the transcript.
                 result, images, successful = dict(error=type(exc).__name__, message=str(exc)[:1000]), [], False
+            if name == "edit_document":
+                result.update(input_version=version_before, output_version=runtime.editor.version,
+                              rolled_back=not successful and runtime.editor.version == version_before)
+                if not successful:
+                    result.update(getattr(tool_exception, "edit_failure", {}))
             append_event(trace_path, dict(kind="tool", step=step, name=name, arguments=args,
                                          success=successful, result=result,
                                          delivered_image_count=sum(p.get("type") == "image_url" for p in images),

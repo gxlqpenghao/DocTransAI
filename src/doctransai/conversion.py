@@ -42,6 +42,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                   independent_semantic_review="not_run")
     editor = None
     final = None
+    runtime = None
     try:
         if not task.instruction.strip():
             raise ValueError("A conversion instruction is required")
@@ -208,6 +209,10 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         issue = dict(kind="execution_error", error_type=type(exc).__name__, message=message[:1500])
         result.issues.append(issue)
         append_event(trace_path, dict(kind="conversion_error", error=issue))
+        report["last_preview"] = dict(version=runtime.preview_version if runtime else None,
+            pages=[str(p) for p in runtime.output_pages] if runtime else [],
+            page_count=len(runtime.output_pages) if runtime and runtime.output_pages else None,
+            matches_current_draft=bool(runtime and runtime.preview_version == editor.version))
         report.update(draft_path=str(draft) if draft else None,
                       structural_check="not_completed")
     events = [json.loads(line) for log in sorted(output_dir.glob("*.jsonl")) for line in log.read_text().splitlines()]

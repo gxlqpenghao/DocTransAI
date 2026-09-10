@@ -106,3 +106,53 @@ def test_replacement_does_not_inherit_invisible_leading_marker(tmp_path):
     e.apply(batch_id="visible", version=0, edits=[dict(op="replace_text", target="n0", old="X{name}", text="Readable")])
     run = next(r for r in Document(e.output).paragraphs[0].runs if r.text == "Readable")
     assert run.font.color.rgb == RGBColor(0, 0, 0)
+
+def test_multiple_ranges_share_snapshot_and_style(tmp_path):
+    outputs=[]
+    for index, reverse in enumerate([False, True]):
+        directory=tmp_path/str(index);directory.mkdir()
+        e=make_editor(directory,['甲😀  乙   丙'])
+        ranges=[dict(start=2,end=4,expected='  ',text='longer甲'),dict(start=5,end=8,expected='   ',text='Z')]
+        if reverse:ranges.reverse()
+        e.apply(batch_id='one',version=0,edits=[dict(op='replace_ranges',target='n0',replacements=ranges)])
+        outputs.append(e.doc.paragraphs[0].text)
+    assert outputs==['甲😀longer甲乙Z丙']*2
+
+
+def test_multiple_range_failure_rolls_back_prior_operations(tmp_path):
+    e=make_editor(tmp_path,['first','abc def ghi'])
+    before=e.output.read_bytes()
+    with pytest.raises(ValueError) as error:
+        e.apply(batch_id='bad',version=0,edits=[dict(op='set_text',target='n0',text='changed'),
+            dict(op='replace_ranges',target='n1',replacements=[dict(start=0,end=3,expected='abc',text='x'),dict(start=2,end=5,expected='c d',text='y')])])
+    assert e.version==0 and e.output.read_bytes()==before
+    assert error.value.edit_failure['failed_operation_index']==1
+    assert error.value.edit_failure['rolled_back']
+    assert e.nodes['n0'].text=='first'
+
+
+def test_protection_summary_matches_bookmark_guard(tmp_path):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    e=make_editor(tmp_path,['prefix {value} suffix'])
+    p=e.doc.paragraphs[0]
+    a=OxmlElement('w:bookmarkStart');a.set(qn('w:id'),'123');a.set(qn('w:name'),'mark');p._p.insert(0,a)
+    b=OxmlElement('w:bookmarkEnd');b.set(qn('w:id'),'123');p._p.append(b)
+    n=e.inspect(detail=True)['nodes'][0]
+    assert n['protected'] and not n['whole_text_replace_allowed']
+    assert 'bookmarks' in n['protection_reason']
+
+
+def test_multiple_ranges_styles_bound_to_base_runs(tmp_path):
+    from docx.shared import Pt
+    e=make_editor(tmp_path,[''])
+    p=e.doc.paragraphs[0]
+    p.add_run('A ').font.size=Pt(10)
+    p.add_run('B ').font.size=Pt(18)
+    p.add_run('C').font.size=Pt(24)
+    e.apply(batch_id='styles',version=0,edits=[dict(op='replace_ranges',target='n0',replacements=[
+        dict(start=0,end=1,expected='A',text='long',style_run_index=2),
+        dict(start=2,end=3,expected='B',text='short',style_run_index=0)])])
+    runs={r.text:r for r in e.doc.paragraphs[0].runs if r.text}
+    assert runs['long'].font.size.pt==24
+    assert runs['short'].font.size.pt==10

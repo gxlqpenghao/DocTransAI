@@ -69,6 +69,11 @@ class DocxEditor:
                                 body_index=node._element.getparent().index(node._element)
                                 if node._element.getparent() is self.doc._element.body else None))
             if isinstance(node, Paragraph):
+                try:
+                    self.guard_text(node)
+                    entries[-1].update(whole_text_replace_allowed=True, protection_reason=None)
+                except ValueError as exc:
+                    entries[-1].update(whole_text_replace_allowed=False, protection_reason=str(exc))
                 entries[-1].update(self.paragraph_details(node) if detail else dict(
                     paragraph_style=node.style.name if node.style else None, run_count=len(node.runs)))
             return key
@@ -111,7 +116,7 @@ class DocxEditor:
                 add_tables(part.tables, f"section {si} {name} ")
         self.nodes = live
         return dict(version=self.version, nodes=entries, image_count=len(self.doc.inline_shapes),
-                    supported_operations=["set_text", "replace_text", "replace_range", "set_images", "repeat_paragraphs", "repeat_rows", "set_list", "format_row", "format_paragraph"],
+                    supported_operations=["set_text", "replace_text", "replace_range", "replace_ranges", "set_images", "repeat_paragraphs", "repeat_rows", "set_list", "format_row", "format_paragraph"],
                     limitations=["No nested-table replacement or floating textbox editing; repeat_rows requires a complete vertical-merge group"])
 
     @staticmethod
@@ -139,7 +144,7 @@ class DocxEditor:
         return dict(runs=runs, paragraph_style=p.style.name if p.style else None,
                     numbering_xml=num[0].xml if num else None,
                     range_unit="Python Unicode code points; end exclusive; offsets require current version",
-                    protected=bool(p._p.xpath(".//w:drawing | .//w:pict | .//w:fldChar | .//w:fldSimple | .//w:hyperlink | .//w:sdt")))
+                    protected=bool(p._p.xpath(".//w:drawing | .//w:pict | .//w:fldChar | .//w:fldSimple | .//w:hyperlink | .//w:sdt | .//w:ins | .//w:del | .//w:bookmarkStart | .//w:bookmarkEnd | .//w:commentRangeStart | .//w:commentRangeEnd")))
 
     def set_list(self, node, items, style, start):
         if style not in ("decimal", "bullet") or not items:
@@ -267,7 +272,7 @@ class DocxEditor:
         p = next(p for p in paragraphs if old in p.text)
         self.replace_range(p, p.text.index(old), p.text.index(old) + len(old), old, new)
 
-    def replace_range(self, p, start, end, expected, new, style_run_index=None):
+    def replace_range(self, p, start, end, expected, new, style_run_index=None, _style_override=None):
         if not isinstance(p, Paragraph):
             raise ValueError("replace_range requires a paragraph ID")
         if not 0 <= start < end <= len(p.text) or p.text[start:end] != expected:
@@ -310,6 +315,8 @@ class DocxEditor:
                 raise ValueError("style_run_index outside paragraph")
             style_run = p.runs[style_run_index]
         style = copy.deepcopy(style_run._r.rPr)
+        if _style_override and _style_override[0]:
+            style = copy.deepcopy(_style_override[1])
         suffix_style = copy.deepcopy(last._r.rPr)
         for run, _, _ in matches:
             run.text = ""
@@ -328,6 +335,27 @@ class DocxEditor:
             Run(element_after, p).text = suffix
         elif last is not first:
             last.text = suffix
+
+    def replace_ranges(self, p, replacements):
+        """All coordinates and style indexes refer to one paragraph snapshot."""
+        if not isinstance(p, Paragraph) or not replacements:
+            raise ValueError("replace_ranges requires a paragraph and nonempty replacements")
+        text = p.text
+        ordered = sorted(replacements, key=lambda item: item["start"])
+        for index, item in enumerate(ordered):
+            if not 0 <= item["start"] < item["end"] <= len(text) or text[item["start"]:item["end"]] != item["expected"]:
+                raise ValueError("replace_ranges expected text mismatch in base snapshot")
+            if index and ordered[index-1]["end"] > item["start"]:
+                raise ValueError("replace_ranges intervals overlap")
+            style_index = item.get("style_run_index")
+            if style_index is not None and not 0 <= style_index < len(p.runs):
+                raise ValueError("style_run_index outside base paragraph")
+        # Explicit styles must not drift as preceding edits add runs.
+        styles = [copy.deepcopy(p.runs[item["style_run_index"]]._r.rPr)
+                  if item.get("style_run_index") is not None else None for item in ordered]
+        for item, style in reversed(list(zip(ordered, styles))):
+            self.replace_range(p, item["start"], item["end"], item["expected"], item["text"],
+                               _style_override=(item.get("style_run_index") is not None, style))
 
     def add_images(self, node, ids, max_height=2.5):
         paragraphs = self.paragraphs(node)
@@ -366,7 +394,7 @@ class DocxEditor:
                 if any(count != expected for count in actual):
                     raise ValueError(f"Each repeated item needs {expected} contents entries in target order; got {actual}. Include the first AND subsequent complete groups; do not fill the prototypes first.")
         try:
-            for edit in edits:
+            for operation_index, edit in enumerate(edits):
                 op = edit["op"]
                 if op == "repeat_rows":
                     self.repeat_rows(edit)
@@ -403,7 +431,9 @@ class DocxEditor:
                 else:
                     node = self.nodes[edit["target"]]
                     self.touched_parts.add(str(node.part.partname).lstrip("/"))
-                    if op == "replace_range":
+                    if op == "replace_ranges":
+                        self.replace_ranges(node, edit["replacements"])
+                    elif op == "replace_range":
                         self.replace_range(node, edit["start"], edit["end"], edit["expected"], edit["text"], edit.get("style_run_index"))
                     elif op == "set_list":
                         self.set_list(node, edit["items"], edit["style"], edit.get("start", 1))
@@ -448,12 +478,13 @@ class DocxEditor:
                         raise ValueError(f"Unsupported edit operation: {op}")
                 self.inspect()  # Retire removed descendants before the next edit in this batch.
             self.save()
-        except Exception:
+        except Exception as exc:
             # Deepcopy of python-docx proxies may produce a second, disconnected
             # part tree. Reload the last atomic file and bind the old IDs to it.
             self.doc = Document(self.output)
             self.nodes, self.next_id, self.touched_parts = {}, prior_next_id, prior_parts
             self.inspect(_restore_ids=prior_ids)
+            exc.edit_failure = dict(failed_operation_index=operation_index, rolled_back=True, input_version=version, output_version=self.version, message_state="Uncommitted intermediate state; whole batch rolled back")
             raise
         self.version += 1
         self.applied_batches[batch_id] = digest
