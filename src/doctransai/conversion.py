@@ -238,6 +238,21 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                   thinking_tokens=sum(d.get("reasoning_tokens", 0) or 0 for d in usage_detail),
                   image_tokens=sum(d.get("image_tokens", 0) or 0 for d in prompt_detail))
     report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
+    if editor is not None:
+        try:
+            final_snapshot = editor.inspect()
+            if isinstance(editor, XlsxEditor):
+                final_snapshot = editor.inspect(node_ids=[f"{s['id']}!{s['used_range']}" for s in final_snapshot['sheets']])
+            (output_dir / 'audit-final-snapshot.json').write_text(json.dumps(final_snapshot, ensure_ascii=False, default=str))
+        except Exception as exc:
+            report['audit_snapshot_error'] = type(exc).__name__
+            report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
+    from doctransai.audit import audit_document
+    try:
+        audit_document(output_dir, semantic=False)
+    except Exception as exc:
+        report['audit_ledger_error'] = type(exc).__name__
+        report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
     return result
 
 

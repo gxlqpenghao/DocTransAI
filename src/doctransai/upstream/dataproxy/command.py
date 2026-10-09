@@ -22,6 +22,7 @@ def main(argv):
     p.add_argument('--output-dir', type=Path)
     p.add_argument('--instruction')
     p.add_argument('--publish-receipt', type=Path, help='Retry publication without rerunning the model')
+    p.add_argument('--replace-audit', action='store_true', help='Explicitly update only audit files with ETag; result document stays immutable')
     p.add_argument('--env-file', type=Path)
     p.add_argument('--timeout-seconds', type=float, default=1800, help='DataProxy stage budget')
     p.add_argument('--conversion-timeout', type=float, default=900)
@@ -37,7 +38,7 @@ def main(argv):
             raise ValueError('Configure DOCTRANSAI_DATAPROXY_BASE_URL and DOCTRANSAI_DATAPROXY_API_KEY')
         common = dict(base_url=a.base_url, api_key=key, timeout=a.timeout_seconds)
         if a.publish_receipt:
-            result = publish_workspace(receipt_path=a.publish_receipt, **common)
+            result = publish_workspace(receipt_path=a.publish_receipt, replace_audit=a.replace_audit, **common)
         else:
             if not a.template or not a.output_dir or not a.instruction:
                 raise ValueError('Template, output directory and instruction are required')

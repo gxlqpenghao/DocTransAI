@@ -16,6 +16,8 @@ def test_publish_verifies_export_and_recovers_without_overwrite(tmp_path):
     conversion.mkdir()
     (conversion / 'result.docx').write_bytes(b'result-bytes')
     (conversion / 'review.json').write_bytes(b'{}')
+    (conversion / 'audit.json').write_text(json.dumps({'status':'assessed','document_sha256':hashlib.sha256(b'result-bytes').hexdigest()}))
+    (conversion / 'audit.html').write_text('<html>audit</html>')
     receipt = tmp_path / 'integration.json'
     receipt.write_text(json.dumps({'mode': 'workspace', 'workspace_id': 'ws',
                                    'conversion': {'execution_status': 'completed'}}))
@@ -43,8 +45,13 @@ def test_publish_verifies_export_and_recovers_without_overwrite(tmp_path):
     assert publish_workspace(**kwargs)['status'] == 'completed'
     assert publish_workspace(**kwargs)['status'] == 'completed'
     assert writes.count('outputs/result.docx') == 1
+    (conversion / 'audit.html').write_text('<html>revised audit</html>')
+    assert publish_workspace(**kwargs, replace_audit=True)['status'] == 'completed'
+    assert writes.count('outputs/result.docx') == 1
+    assert writes.count('outputs/audit.html') == 2
+    assert list(tmp_path.glob('workspace-export-previous-*.zip'))
     (conversion / 'result.docx').write_bytes(b'changed')
-    with pytest.raises(ValueError, match='differs'):
+    with pytest.raises(ValueError, match='audit matching'):
         publish_workspace(**kwargs)
 
 
@@ -139,3 +146,22 @@ def test_remote_command_exposes_output_budget(monkeypatch):
                          '--instruction','fill','--max-output-tokens','12000']) == 0
     assert captured['config'].max_output_tokens == 12000
     assert captured['config'].reasoning_effort == 'high'
+
+
+@pytest.mark.parametrize('audit_status,expected', [('assessed','completed'),('needs_manual_audit','audit_failed')])
+def test_remote_requires_semantic_audit_after_conversion(tmp_path, monkeypatch, audit_status, expected):
+    from doctransai.upstream.dataproxy import workflow
+    from doctransai.config import RuntimeConfig
+    from doctransai.types import ConversionResult
+    import doctransai.audit
+    template=tmp_path/'template.docx';template.write_bytes(b'template')
+    def artifact(self, job, destination):
+        destination.mkdir(parents=True)
+        p=destination/'manifest.json';p.write_text(json.dumps({'quality':{'status':'complete'}}));return p
+    monkeypatch.setattr(workflow.DataProxyClient,'artifact',artifact)
+    monkeypatch.setattr(workflow,'convert',lambda *a,**k:ConversionResult('completed','not_run','result.docx','review.json'))
+    monkeypatch.setattr(doctransai.audit,'audit_document',lambda *a,**k:{'status':audit_status})
+    result=workflow.run_remote(base_url='https://example.test',api_key='secret',template=template,job_id='job',
+        output_dir=tmp_path/'run',instruction='fill',config=RuntimeConfig(),
+        transport=httpx.MockTransport(lambda r:httpx.Response(200,json={'status':'succeeded','parse_quality':'complete'})))
+    assert result['status']==expected

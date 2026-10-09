@@ -68,6 +68,12 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
         save(conversion=asdict(result), status='converted' if result.execution_status == 'completed' else 'conversion_failed')
         if result.execution_status != 'completed':
             return receipt
+        from doctransai.audit import audit_document
+        audit = audit_document(output_dir / 'conversion', config=config)
+        save(audit_status=audit['status'])
+        if audit['status'] != 'assessed':
+            save(status='audit_failed')
+            return receipt
         if mode == 'workspace':
             publish_workspace(base_url=base_url, api_key=api_key, receipt_path=receipt_path,
                               timeout=timeout, transport=transport)
@@ -82,7 +88,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
         raise
 
 
-def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, transport=None):
+def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, transport=None, replace_audit=False):
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('mode') != 'workspace' or receipt.get('conversion', {}).get('execution_status') != 'completed':
         raise ValueError('Only a completed workspace conversion may be published')
@@ -91,6 +97,13 @@ def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, tr
     files = [p for p in files if p.is_file()] + [root / 'conversion' / 'review.json']
     if len(files) != 2 or not all(p.is_file() for p in files):
         raise ValueError('Completed conversion result or review report missing')
+    audit_path = root / 'conversion' / 'audit.json'
+    audit = json.loads(audit_path.read_text())
+    if audit['status'] != 'assessed' or audit['document_sha256'] != hashlib.sha256(files[0].read_bytes()).hexdigest():
+        raise ValueError('Completed field audit matching the output is required')
+    files += [audit_path, root / 'conversion' / 'audit.html']
+    receipt.update(status='publishing', audit_status='assessed')
+    save_receipt(receipt_path, receipt)
     wsid = receipt['workspace_id']
     published = []
     with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport) as dp:
@@ -102,7 +115,13 @@ def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, tr
             existing = entries.get(target)
             if existing:
                 if existing['sha256'] != sha:
-                    raise ValueError('Workspace result differs; use a new run ID instead of overwriting')
+                    if replace_audit and file.name in {'audit.json', 'audit.html'}:
+                        _, etag = dp.read(wsid, target)
+                        if not etag:
+                            raise ValueError('Audit replacement requires ETag')
+                        dp.write(wsid, target, data, etag=etag)
+                    else:
+                        raise ValueError('Workspace result differs; use a new run ID instead of overwriting')
             else:
                 dp.write(wsid, target, data)
             actual, _ = dp.read(wsid, target)
@@ -116,6 +135,12 @@ def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, tr
         dp.write(wsid, state_path, json.dumps({'status': 'completed', 'files': published}).encode(),
                  content_type='application/json', etag=etag)
         archive = root / 'workspace-export.zip'
+        if archive.exists():
+            import zipfile
+            with zipfile.ZipFile(archive) as z:
+                complete = all(item['path'] in z.namelist() and hashlib.sha256(z.read(item['path'])).hexdigest() == item['sha256'] for item in published)
+            if not complete:
+                archive.rename(root / ('workspace-export-previous-' + uuid.uuid4().hex[:8] + '.zip'))
         if not archive.exists():
             dp.export(wsid, archive)
         import zipfile

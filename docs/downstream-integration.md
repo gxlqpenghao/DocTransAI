@@ -9,7 +9,7 @@ DocTransAI安装在业务项目后端。DataProxy负责源文档解析、所属�
 仓库提供独立 `Dockerfile`，不依赖DataProxy镜像。构建 `docker build -t doctransai:1.1.0 .`，将可用的renderer目录只读挂载到 `/renderer`，工作目录挂载到 `/work`。配置通过受限权限的 `--env-file` 传入，不能写进镜像。
 
 ```bash
-docker run --rm --env-file /secure/doctransai.env \
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --env-file /secure/doctransai.env \
   -v /absolute/renderer-directory:/renderer:ro \
   -v /absolute/business-data:/work \
   doctransai:1.1.0 remote --mode zip \
@@ -55,6 +55,25 @@ doctransai remote --mode workspace \
 也可传 `--source-file` 新建解析任务。`--source-file` 与 `--job-id` 二选一。客户端创建或复用工作区，通过分页目录和文件读取API取得只读资料快照，逐文件校验SHA-256，再交给原转换内核。为了保留现有严格校验与本地办公工具，当前会物化完整只读快照，不宣称按模型请求懒加载；模型仍通过既有材料选择机制使用资料。
 
 转换成功后上传 `outputs/result.docx` 或 `outputs/result.xlsx` 与 `outputs/review.json`，读回核对哈希，更新 `state/doctransai.json`，导出 `workspace-export.zip` 并核对成品。转换失败不会把草稿上传为成功成品。对已存在且内容不同的成果拒绝覆盖，要求新业务run ID；更新状态携带ETag。
+
+## 字段审计交付
+
+每次转换同时保存 `audit.json`、`audit.html`，包含模板定位、修改前后内容、来源引用、操作结果及失败/回滚记录。原 `convert` 先输出保守审计台账，状态为pending；`remote` 继续用独立上下文K3进行字段语义审计，再发布成品与报告。审计不是再次编辑文档，也不是完整业务签发。
+
+实际填报位置按 `filled_high`（已填且高确信度）、`filled_low`（已填且低确信度）、`unfilled`（未填）分类；标题、标签、空白版式归 `not_field` 单独计数。模型必须覆盖全部候选位置，并给出字段名、理由、证据及人工核对建议。高确信度还需有可核验的原生引用和直接原文摘录；引用存在本身不能提升确信度。确信度是模型判断，不提供伪精确百分比。
+
+审计JSON绑定成品SHA-256，成品修改后旧审计不再适用。审计失败时保留保守结果并标记 `needs_manual_audit`，remote返回 `audit_failed`，不会将其发布为完整交付。工作区额外保存 `outputs/audit.json`、`outputs/audit.html`；JSON保留完整识别快照和事件，HTML可筛选三类填报位置及非填报位置，方便定位审查。
+
+已有成品可单独补审计，不重跑解析或填写：
+
+```bash
+doctransai audit --run-dir /work/runs/workspace-001/conversion
+doctransai remote --publish-receipt /work/runs/workspace-001/integration.json
+```
+
+若重新生成的审计与工作区已有审计不同，显式增加 `--replace-audit`，仅允许以ETag更新两份审计文件，成品DOCX/XLSX仍禁止覆盖。文件读取请求identity编码，避免网关gzip将ETag弱化后导致If-Match更新失败。旧导出包保留为previous版本，新导出包重新校验全部交付文件。
+
+语义审计有独立的模型调用与时间/输出预算。多页文档最多向审计模型提供前8页图片，所有候选字段仍须覆盖；超出单次审计文本预算时明确转人工，不把未审部分标为高确信度。XLSX审计以单元格地址定位、DOCX以稳定节点与表格位置定位。改行/增行等操作的完整原始记录始终保留。
 
 ## 质量、预算与恢复
 

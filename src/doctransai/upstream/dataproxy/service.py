@@ -142,7 +142,8 @@ class DataProxyClient:
 
     def read(self, workspace_id, path):
         endpoint = self.workspace_path(workspace_id) + '/files/' + quote(path, safe='/')
-        response = self.request('GET', endpoint)
+        # nginx gzip weakens ETag; If-Match requires the identity representation's strong validator.
+        response = self.request('GET', endpoint, headers={'Accept-Encoding': 'identity'})
         return response.content, response.headers.get('etag')
 
     def write(self, workspace_id, path, data, *, etag=None, content_type='application/octet-stream'):

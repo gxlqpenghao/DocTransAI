@@ -49,6 +49,15 @@ def test_conflict_and_no_blind_retry():
     assert len(calls) == 1
 
 
+def test_read_requests_identity_encoding_for_strong_etag():
+    def handle(r):
+        strong = r.headers.get('accept-encoding') == 'identity'
+        return httpx.Response(200, content=b'{}', headers={'etag': '"hash"' if strong else 'W/"hash"'})
+    with client(handle) as dp:
+        _, etag = dp.read('ws', 'state/progress.json')
+        assert etag == '"hash"'
+
+
 @pytest.mark.parametrize('path', ['../escape', '/tmp/a', 'outputs/../../a', 'outputs\\a', 'content/a'])
 def test_unsafe_or_readonly_write_rejected(path):
     with client(lambda r: pytest.fail('network must not be used')) as dp:
