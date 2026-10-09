@@ -11,9 +11,14 @@ from doctransai import __version__
 
 
 def main(argv: list[str] | None = None) -> int:
+    actual = sys.argv[1:] if argv is None else argv
+    if actual and actual[0] == 'remote':
+        from doctransai.upstream.dataproxy.command import main as remote_main
+        return remote_main(actual[1:])
     parser = argparse.ArgumentParser(prog="doctransai")
     parser.add_argument("--version", action="store_true", help="Print the DocTransAI version.")
     commands = parser.add_subparsers(dest="command")
+    commands.add_parser('remote', help='Convert through DataProxy ZIP or workspace APIs (remote --help)')
     parse_parser = commands.add_parser("parse", help="Upload a source to the DataProxy service and validate its package")
     parse_parser.add_argument("--source-file", type=Path, required=True)
     parse_parser.add_argument("--output-dir", type=Path, required=True)

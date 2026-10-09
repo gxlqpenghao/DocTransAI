@@ -1,6 +1,8 @@
-# DocTransAI 1.0.0
+# DocTransAI 1.1.0
 
-正式版本入口：`codex/v1.0-release`，固定标签 `v1.0.0`。采用原可用流程与四项工具加固（基线 `453f913`），默认 `kimi-k3/high`；不包含后续三条候选提示词改写。下游请固定标签或提交，不再使用已结束的实验分支名。版本范围和验证说明见 [v1.0 定版说明](docs/v1.0-release.md)。
+v1.1新增集团DataProxy双通道接入，完整配置、ZIP/工作区命令与恢复步骤见 [项目接入说明](docs/downstream-integration.md)。模型与转换内核沿用v1.0基线。
+
+v1.0历史版本入口：`codex/v1.0-release`，固定标签 `v1.0.0`。采用原可用流程与四项工具加固（基线 `453f913`），默认 `kimi-k3/high`；不包含后续三条候选提示词改写。下游请固定标签或提交，不再使用已结束的实验分支名。版本范围和验证说明见 [v1.0 定版说明](docs/v1.0-release.md)。
 
 DocTransAI 是一个面向“文书成品”的模板驱动转换工具：读取 DataProxy 产出的结构化文档包，依据用户任务把有证据的事实写入 DOCX/XLSX 模板，并保留可追溯的运行报告、失败草稿和未决事项。
 
@@ -150,7 +152,7 @@ DOCX 支持文本范围/匹配替换、列表、段落组、表格行组和图�
 `package_root` 为基准。旧 `data_asset_pack_v0` 本地 bundle 入口保留供历史任务使用；
 这不代表 DataProxy 提供两套正式服务契约。
 
-通过服务取得包（当前 DataProxy 对外 HTTPS 尚待部署验收）：
+通过服务取得包（旧的单独解析命令继续支持）：
 
 ```bash
 export DOCTRANSAI_DATAPROXY_BASE_URL='https://your-dataproxy-host'
@@ -178,7 +180,7 @@ uv run doctransai convert \
 源文件可直接取包内副本，无需服务器路径。质量 degraded 的警告会进入模型材料及
 转换报告；质量 failed 不进入填写流程。转换输出不代表上游解析或业务事实认证。
 
-**2026-09-09 联调边界**：远端 `9ee3749` 的新 TXT 包通过外层、路径和哈希验证，
+**历史记录，非当前阻塞：2026-09-09 联调边界**：远端 `9ee3749` 的新 TXT 包通过外层、路径和哈希验证，
 但 evidence_units 实际包含其正式 schema 禁止的字段，严格消费因此失败。
 需 DataProxy 修正 schema/产物一致性后再做真实转换验收；没有为通过测试静默删字段或放宽校验。
 
