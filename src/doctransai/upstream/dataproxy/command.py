@@ -53,5 +53,6 @@ def main(argv):
     except Exception as exc:
         # Exception text from a remote provider must not leak credentials.
         import sys
-        print(f'{type(exc).__name__}: remote workflow failed; inspect integration.json and conversion reports', file=sys.stderr)
+        status = f' HTTP {exc.status}' if hasattr(exc, 'status') else ''
+        print(f'{type(exc).__name__}{status}: remote workflow failed; inspect integration.json and conversion reports', file=sys.stderr)
         return 1

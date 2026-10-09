@@ -71,6 +71,19 @@ def test_upload_failure_preserves_request_id_without_secret(tmp_path):
     assert json.loads(text)['status'] == 'failed'
 
 
+def test_http_failure_receipt_keeps_status_without_body(tmp_path):
+    from doctransai.upstream.dataproxy.workflow import run_remote
+    from doctransai.config import RuntimeConfig
+    template = tmp_path / 'template.docx'; template.write_bytes(b'placeholder')
+    with pytest.raises(ValueError):
+        run_remote(base_url='https://example.test', api_key='secret', template=template, job_id='job',
+            output_dir=tmp_path/'run', instruction='fill', config=RuntimeConfig(),
+            transport=httpx.MockTransport(lambda r: httpx.Response(429, text='private-server-detail')))
+    text = (tmp_path/'run/integration.json').read_text()
+    assert json.loads(text)['error_http_status'] == 429
+    assert 'private-server-detail' not in text and 'secret' not in text
+
+
 def test_manifest_cannot_bypass_quality_policy(tmp_path, monkeypatch):
     from doctransai.upstream.dataproxy import workflow
     from doctransai.config import RuntimeConfig

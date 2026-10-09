@@ -78,7 +78,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
     except Exception as exc:
         # Preserve local output and stable IDs for recovery, without copying provider messages.
         save(status='publication_failed' if receipt.get('status') == 'converted' else 'failed',
-             error_type=type(exc).__name__)
+             error_type=type(exc).__name__, error_http_status=getattr(exc, 'status', None))
         raise
 
 
