@@ -1,196 +1,283 @@
-# DocTransAI 1.1.0
+# DocTransAI
 
-v1.1新增集团DataProxy双通道接入，完整配置、ZIP/工作区命令与恢复步骤见 [项目接入说明](docs/downstream-integration.md)。模型与转换内核沿用v1.0基线。
+DocTransAI将DataProxy解析的源材料，按业务要求填入DOCX或XLSX模板，并提供转换成品、字段审计和操作记录，供项目人员复核、修改与调试。
 
-v1.0历史版本入口：`codex/v1.0-release`，固定标签 `v1.0.0`。采用原可用流程与四项工具加固（基线 `453f913`），默认 `kimi-k3/high`；不包含后续三条候选提示词改写。下游请固定标签或提交，不再使用已结束的实验分支名。版本范围和验证说明见 [v1.0 定版说明](docs/v1.0-release.md)。
+**当前版本：1.2.0。** 支持ZIP和任务工作区两种接入方式；LLM可配置，不再限定K3。默认模型仍为`kimi-k3`，已有真实业务验收见[1.1验收记录](docs/v1.1-release.md)。其他模型必须满足下述接口能力，并由接入项目用自己的材料验收。
 
-DocTransAI 是一个面向“文书成品”的模板驱动转换工具：读取 DataProxy 产出的结构化文档包，依据用户任务把有证据的事实写入 DOCX/XLSX 模板，并保留可追溯的运行报告、失败草稿和未决事项。
-
-v1.0 的边界很明确：它是“可用、可核对、失败可恢复”的候选生成工具，不是无人值守的业务签发系统。模型自检、`model_passed` 或渲染成功都不等于业务事实已认证；日期、人员职责和文书角色仍必须由业务人员确认。
-
-## 当前主流程
+## 1. 在业务项目中的位置
 
 ```text
-DataProxy bundle + 源文件 + 模板 + 用户指令
-              │
-              ▼
-程序准备材料：原生证据、主源引用、短源页面、相关图片、模板地址
-              │
-              ▼
-固定 kimi-k3 集中提交 edit_document
-              │
-              ▼
-程序自动真实渲染当前版本
-              │
-              ▼
-kimi-k3 检查当前页：finish，或有限修正后再次自动渲染
-              │
-              ▼
-result.docx / result.xlsx + review.json + trace.jsonl
+业务前端：上传源材料、选择模板、填写要求、查看成品与审计
+    ↓
+业务后端：安装并调用DocTransAI，保存业务任务与用户权限
+    ├─ 使用项目授权Key → 集团DataProxy → 解析、知识库入库、交付资料
+    ├─ 使用LLM凭证 → 自选模型 → 模板填写与字段审计
+    └─ 本地文档工具 → 编辑、渲染、核验 → 成品及报告
 ```
 
-独立语义复核默认关闭；需要时使用 `convert --review`、`review` 子命令或 `review_document()` API。普通路径的 2 次请求/修正 3 次是效率目标，不是强制上限，也不代表所有样本实绩。
+DataProxy统一管理源文档和解析资产，DocTransAI负责模板转换。DocTransAI运行在业务项目后端，无需在集团服务器另建集中转换服务。业务项目负责登录、异步队列、业务任务状态、下载权限、成果保留和人工审批。
 
-## 代码结构
+**两种凭证分别配置：**项目授权Key用于调用DataProxy；LLM API Key用于调用模型。两者仅保存在后端，不放在浏览器代码、URL、Git提交或公开日志中。
 
-- `src/doctransai/conversion.py`：CLI/API 主入口、材料准备、输出状态和失败恢复。
-- `src/doctransai/agent.py`：有界 K3 工具循环、自动预览和运行指标。
-- `src/doctransai/data_layer/`：DataProxy bundle 读取与原生材料视图。
-- `src/doctransai/documents/`：DOCX/XLSX 原子编辑、版本保护、图片/公式保护和预览。
-- `src/doctransai/tools.py`：模型可见工具 schema 与确定性校验。
-- `src/doctransai/review.py`：显式独立复核及有限、定位范围内修正。
-- `src/doctransai/prompts/`：编辑与复核提示词。
-- `scripts/`：仅保留仍有验证价值的辅助脚本；历史映射/渲染模块保留为兼容代码，不属于推荐主入口。
+## 2. 安装与运行环境
 
-主路径不依赖旧 `SourceModel`、mapping planner、`RenderPlan` 或旧渲染流水线。它们仍保留，是为了不静默破坏历史测试和兼容调用；后续若要删除，需单独确认影响范围。
-
-## 安装与配置
-
-要求 Python 3.12、`uv` 和完整源码检出。当前不支持只安装 standalone wheel：`contracts/` 目录必须和 `src/` 一起存在。
+使用Python **3.12**、`uv`和完整源码目录：
 
 ```bash
+git clone https://github.com/GXLQ-ARCLAB/DocTransAI.git
+cd DocTransAI
 uv sync --locked
 cp .env.example .env
-# 编辑 .env，填写 K3 endpoint 和本地渲染器路径
 uv run doctransai --version
 ```
 
-项目模型固定为 `kimi-k3`，不通过环境变量切换模型。K3 的思考强度支持 `low`、`high`、`max`，默认 `high`，不能关闭思考；可用 `--reasoning-effort high` 或 `DOCTRANSAI_LLM_REASONING_EFFORT=high` 调整。凭证只放在未跟踪的 `.env` 或外部环境变量中；不要把真实 key 写入命令、报告、trace 或 Git。
+当前交付以完整源码安装为准，保留`src/`和`contracts/`；不要只拷贝一个wheel或入口脚本。默认输出格式为DOCX/XLSX，旧DOC模板需先显式转换为DOCX。
 
-DOC/DOCX/PDF 源的页面预览需要可运行的 bundled `render_docx.py`；XLSX 源主要依赖 DataProxy 的 native range、sheet 和图片锚点。产品支持的输出是 DOCX 或 XLSX，不直接编辑 DOC/PDF 模板。
+文档预览还需要：
 
-## 运行示例
+- 可运行的`render_docx.py`及其Python环境，包含`pdf2image`、Pillow等依赖。
+- LibreOffice Writer/Calc、Poppler（`pdftoppm`、`pdfinfo`）和中文字体。
+- 可用的模型网络连接；所选模型支持图片输入及函数工具调用。
 
-普通转换：
+用`DOCTRANSAI_DOCX_RENDERER`和`DOCTRANSAI_RENDER_PYTHON`指定renderer路径及解释器。可使用部署方提供的Codex bundled renderer；源码包不捆绑Codex运行时。应先拿一份中文模板实际渲染并检查PNG，不能只检查提取文本。macOS使用bundled renderer与可见的CJK字体；Linux容器需安装自己的办公运行库与字体。
+
+独立运行镜像构建示例：
 
 ```bash
-uv run doctransai convert \
-  --bundle /data/parsed_document_bundle.json \
-  --source-file /data/source.docx \
-  --template /data/template.docx \
-  --output-dir /data/runs/example \
-  --instruction '依据选定源材料填写模板；缺少依据的内容留空。' \
-  --env-file /secure/path/provider.env
+docker build -t doctransai:1.2.0 .
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  --env-file /secure/doctransai.env \
+  -v /absolute/renderer-directory:/renderer:ro \
+  -v /absolute/business-data:/work \
+  doctransai:1.2.0 remote --mode zip \
+  --source-file /work/source.docx --template /work/template.docx \
+  --output-dir /work/runs/example \
+  --instruction '依据源材料填写模板，缺少依据的内容留空并说明。'
 ```
 
-需要降低 K3 思考强度时，在上述命令中增加 `--reasoning-effort low` 或
-`--reasoning-effort high`；降低档位可能减少延迟和 token 消耗，但复杂文档的
-事实/版式判断可能退化。
+Dockerfile安装办公工具、中文字体和renderer的`pdf2image`依赖。renderer目录需含`render_docx.py`；容器配置中的路径应使用容器路径，例如`/renderer/render_docx.py`和`python`。
 
-选定主源对象时可重复使用 `--source-ref`：
+## 3. 配置DataProxy授权与LLM
 
-```bash
-uv run doctransai convert \
-  --bundle /data/parsed_document_bundle.json \
-  --source-file /data/source.xlsx \
-  --template /data/ledger.xlsx \
-  --source-ref record-or-range-ref \
-  --output-dir /data/runs/ledger \
-  --instruction '仅依据选定记录填写，未知内容保留并报告。' \
-  --env-file /secure/path/provider.env
+开发人员取得分配给本业务项目的授权Key后，在后端`.env`中填写以下配置。仓库只提供占位符，不携带实际授权。
+
+```dotenv
+# DataProxy：管理员已将项目Key绑定到相应知识库
+DOCTRANSAI_DATAPROXY_BASE_URL=https://dataproxy.gxlq.com.cn
+DOCTRANSAI_DATAPROXY_API_KEY=<我们提供的项目授权Key>
+
+# LLM：填写服务商的Chat Completions基址、Key和模型ID
+DOCTRANSAI_LLM_BASE_URL=https://your-provider.example/v1
+DOCTRANSAI_LLM_API_KEY=<你的LLM凭证>
+DOCTRANSAI_LLM_MODEL=kimi-k3
+DOCTRANSAI_LLM_MAX_TOKENS=16000
+DOCTRANSAI_LLM_REASONING_EFFORT=auto
+DOCTRANSAI_LLM_TIMEOUT_SECONDS=180
+DOCTRANSAI_LLM_TOKEN_PARAMETER=max_tokens
+
+# 本机的真实renderer路径和解释器
+DOCTRANSAI_DOCX_RENDERER=/absolute/path/render_docx.py
+DOCTRANSAI_RENDER_PYTHON=/absolute/path/python3
 ```
 
-复核已有输出：
+调用CLI时显式传`--env-file .env`，或设置`DOCTRANSAI_ENV_FILE`。**不会自动加载当前目录的`.env`。** Docker的`--env-file`会将配置注入环境，通常无需再给CLI传同名参数。
+
+配置优先级：**显式CLI/Python参数 → 进程环境变量 → 指定配置文件 → 默认值**。配置文件按`KEY=value`读取，可有引号与`export`前缀，但不执行shell、不展开变量或命令。
+
+DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传任意知识库ID。源文档上传到授权知识库后，管理员可按权限审阅解析任务和资产。
+
+### 切换模型
+
+设置`DOCTRANSAI_LLM_MODEL`或传`--model <服务商模型ID>`，无需修改代码。当前模型适配层使用`POST <基址>/chat/completions`、Bearer鉴权、SSE流式响应、图片消息和function tool calls。原生的其他API协议需要兼容网关或额外适配器。
+
+- `reasoning-effort=auto`：K3使用`high`，其他模型不发送`reasoning_effort`。
+- `reasoning-effort=omit`：不发送该字段，适用于不支持它的模型；它不表示服务端关闭思考。
+- `none/low/medium/high/max`等值：按服务商支持情况显式配置，客户端原样发送。K3仍只接受`low/high/max`。
+- 非K3模型默认不发送`temperature`；需要时设置数值。`temperature=omit`可显式省略。
+- 服务商若要求`max_completion_tokens`，将`DOCTRANSAI_LLM_TOKEN_PARAMETER`或`--token-parameter`改为该值。
+- 不支持流式usage选项的兼容网关，可设置`DOCTRANSAI_LLM_STREAM_USAGE=false`；缺失用量记录为未知，不当作零消耗。
+
+模型可调用并不代表转换质量已验收。需要使用该模型检查真实模板的图片理解、工具调用、证据引用、分页及审计表现。当前真实公网业务验收基于K3；其他模型的本次验证是配置和请求契约测试。
+
+## 4. 方式A：ZIP接入
+
+适合已有本地文件流水线或自有存储的业务后端。
 
 ```bash
-uv run doctransai review \
-  --bundle /data/parsed_document_bundle.json \
-  --source-file /data/source.docx \
-  --template /data/original-template.docx \
-  --document /data/existing-output.docx \
-  --output-dir /data/runs/review \
-  --instruction '检查当前输出；只有有明确依据的问题才修正。' \
-  --env-file /secure/path/provider.env
+uv run doctransai remote --env-file .env --mode zip \
+  --source-file ./materials/source.docx \
+  --request-id saved-upload-001 \
+  --template ./templates/template.docx \
+  --output-dir ./runs/zip-001 \
+  --instruction '依据源文档填写模板，无依据的内容留空并在审计中说明。'
 ```
 
-每次使用新的 `--output-dir`。普通成功结果为 `result.docx`/`result.xlsx`；显式 review 的候选为 `candidate.docx`/`candidate.xlsx`。`review.json` 记录状态、哈希、页覆盖、指标和问题；`trace.jsonl` 记录模型和工具事件；编辑失败时保留 `working.*` 草稿并返回 `failed`，不会将失败标成成功。
+一次执行完成上传、轮询、ZIP下载与校验、真实模型转换和字段审计。ZIP方式不创建工作区，也不回传成品。每次使用新的输出目录；业务后端保存自己的业务任务ID和命令退出码。
 
-## 工具边界
+同一个成功解析任务可直接复用，改用`--job-id <job_id>`代替`--source-file`，避免重复上传。`job_id`保存在输出目录的`integration.json`中。
 
-| 工具 | 作用 | 普通路径 |
-|---|---|---|
-| `read_source` | 读取 DataProxy 原生对象或搜索 | 按需调用；初始材料已先准备 |
-| `view_source_page` | 查看源页并标记页码对应边界 | 长源文档或歧义时按需调用 |
-| `view_source_asset` | 查看原生图片及归属上下文 | 未预附或需要复核图片时调用 |
-| `inspect_document` | 查看模板/当前文档地址、范围、格式 | 初始结构已准备；复杂修改时调用 |
-| `edit_document` | 版本化、原子批量编辑 | 由 K3 提交，程序校验地址、引用和格式 |
-| `preview_document` | 查看模板或缺失输出页 | 普通编辑后由程序自动渲染；仅按需调用 |
-| `finish` | 提交交付摘要和未决事项 | 只能在当前版本页面覆盖后成功 |
+## 5. 方式B：工作区接入
 
-DOCX 支持文本范围/匹配替换、列表、段落组、表格行组和图片；XLSX 支持明确矩阵、公式保护、行复制、图片锚定、格式和打印范围。复杂浮动文本框、复杂嵌套表、宏、透视表、外部链接、复杂绘图、完整公式计算和进程重启恢复不在 v1 支持边界内。
-
-当已填模板是否为示例、既有记录还是必须保留的业务数据无法从用户指令和模板语义确定时，系统应保留已有内容并报告歧义；不能仅凭 `source_refs` 自动清空。
-
-## 测试
-
-定向回归：
+使用同一解析任务，无需再次解析：
 
 ```bash
-.venv/bin/python -m pytest \
-  tests/documents \
+uv run doctransai remote --env-file .env --mode workspace \
+  --job-id <已有解析任务ID> --run-id saved-business-run-001 \
+  --template ./templates/template.docx \
+  --output-dir ./runs/workspace-001 \
+  --instruction '依据源文档填写模板，无依据的内容留空并在审计中说明。'
+```
+
+也可以传`--source-file`新建解析任务。客户端通过HTTP分页与文件API读取工作区资料，在业务后端物化只读快照后执行转换。模型仍按现有材料选择机制消费资料；不把整个目录直接塞入模型。
+
+成功后回写并读回核验：
+
+```text
+outputs/result.docx 或 result.xlsx
+outputs/review.json
+outputs/audit.json
+outputs/audit.html
+state/doctransai.json
+```
+
+随后导出`workspace-export.zip`并验证上述交付文件哈希。工作区不会代替业务后端执行模型或代码；工作区成果也不会自动进入知识库。
+
+同一项目、job ID和run ID复用同一有效工作区。解析ZIP过期但已有工作区仍有效时，可以加`--workspace-id <ID>`直接读取快照。工作区有保留期与配额，默认7天保留期，以实际部署为准，应及时导出和备份。
+
+## 6. 交付物与人工审查
+
+```text
+runs/<本次运行>/
+├── integration.json              # 任务身份、质量、阶段、发布状态；不含Key
+├── input/package/               # 校验后的源材料、原生证据及图片
+├── conversion/
+│   ├── result.docx 或 result.xlsx
+│   ├── audit.html               # 可筛选的人工审查报告
+│   ├── audit.json               # 机器可读字段审计
+│   ├── review.json              # 执行、自检、警告、哈希与用量
+│   ├── trace.jsonl              # 模型/工具事件、拒绝与回滚结果
+│   ├── input.json              # 模板识别快照和初始材料
+│   ├── audit-final-snapshot.json
+│   └── previews/               # 渲染页面，用于核查版式
+└── workspace-export.zip         # 仅工作区方式
+```
+
+业务页面可提供“下载成品”和“查看审计”。推荐先查看低确信度与未填项，再打开对应成品修改。
+
+| 审计类别 | 含义 | 人工处理 |
+| --- | --- | --- |
+| `filled_high` | 已填入，模型认为源证据直接支持；程序另外核验引用和摘录 | 根据业务要求抽查、确认 |
+| `filled_low` | 已填入，但有推断、识别疑点、引用摘录未核验等情况 | 阅读具体理由，核对源材料并修正 |
+| `unfilled` | 未填、占位符未落实或相关位置被删除 | 查看缺少依据、歧义、不适用或失败原因 |
+| `not_field` | 标题、标签或版式，不是实际填报位置 | 不计入未填写项，可检查识别是否合理 |
+
+`audit.json`使用`schema_version: doctransai.audit.v1`。`fields[]`包含`field_id`、`location`、`field_label`、`before`、`after`、`category`、`reason`、`review_action`、`evidence`和`operation_ids`。`operations`与`activity_log`保留成功、拒绝和回滚记录；源证据与操作日志引用区分存储。DOCX使用节点及表格位置，XLSX使用工作表/单元格地址；DOCX的table/row/column索引从0开始。
+
+**确信度不是统计概率，也不等于人工认证。** 写入成功、原生引用存在与内容真实正确分别记录。报告绑定`document_sha256`，成品被修改后原审计不能继续作为该新版本的有效审计。当前不提供在线人工修改审批系统，业务项目可在此JSON之上实现自己的复核流程。
+
+`remote`默认完成语义审计后才交付。原`convert`/`review`入口先生成保守的`pending`台账，需额外运行：
+
+```bash
+uv run doctransai audit --env-file .env --run-dir ./runs/workspace-001/conversion
+```
+
+该命令核对已有成品，不重跑填写。对于人工修改过的成品，应先通过`review`形成绑定新哈希的新运行目录，再审计；不能直接沿用旧报告哈希。审计失败会明确标记`needs_manual_audit`，不会把未审部分标为高确信度。
+
+## 7. 开发时可调参数
+
+以下模型参数在`remote`、`convert`、`review`、`audit`命令均可使用。
+
+| 参数/配置 | 作用 | 未配置时 |
+| --- | --- | --- |
+| `--model` / `DOCTRANSAI_LLM_MODEL` | 服务商模型ID | `kimi-k3` |
+| `--max-output-tokens` / `DOCTRANSAI_LLM_MAX_TOKENS` | 每次请求的输出预算；部分模型将思考计入其中 | remote/audit 16000；convert/review 5000 |
+| `--reasoning-effort` / `DOCTRANSAI_LLM_REASONING_EFFORT` | 思考强度或省略策略 | auto：K3 high，其他模型省略 |
+| `--temperature` / `DOCTRANSAI_LLM_TEMPERATURE` | 采样温度或`omit` | K3 1.0，其他模型省略 |
+| `--token-parameter` / `DOCTRANSAI_LLM_TOKEN_PARAMETER` | 输出预算的请求字段名 | `max_tokens` |
+| `--llm-timeout-seconds` / `DOCTRANSAI_LLM_TIMEOUT_SECONDS` | 单次网络I/O等待上限，同时受阶段截止时间限制 | 180秒 |
+| `DOCTRANSAI_LLM_STREAM_USAGE` | 是否发送流式usage选项 | true |
+| `DOCTRANSAI_LLM_MAX_REQUEST_BYTES` | 单次模型请求体大小预算 | 6000000字节 |
+| `DOCTRANSAI_LLM_MAX_INPUT_CHARS` | 单次输入字符预算，0表示不另设此限制 | 0 |
+
+流程参数：
+
+| CLI参数 | 所在命令 | 默认值与含义 |
+| --- | --- | --- |
+| `--max-steps` | remote/convert/review | 12，填写工具循环步数上限 |
+| `--conversion-timeout` | remote | 900秒；填写阶段及后续审计分别使用该预算，不是整条链路总时限 |
+| `--timeout-seconds` | remote | 1800秒，DataProxy阶段预算；发布重新开始独立预算 |
+| `--timeout-seconds` | convert/review/audit | 900秒，对应转换/复核或审计阶段预算 |
+| `--allow-degraded` | remote | 默认关闭；显式接受上游degraded并保留警告 |
+| `--review` | convert | 显式启用额外独立语义复核与有限修正，默认关闭 |
+| `--review-max-steps` / `--repair-max-steps` | convert/review | 6 / 4 |
+| `--max-repair-rounds` | convert/review | 1，范围0–2 |
+| `--render-script` / `--render-python` | remote/convert/review | 覆盖renderer及解释器配置 |
+
+例如调试另一个兼容模型：
+
+```bash
+uv run doctransai remote --env-file .env --mode zip \
+  --job-id <job_id> --template ./templates/template.docx \
+  --output-dir ./runs/model-comparison-001 \
+  --model <模型ID> --reasoning-effort omit --temperature omit \
+  --max-output-tokens 24000 --token-parameter max_completion_tokens \
+  --conversion-timeout 1200 \
+  --instruction '依据源文档填写模板；缺少依据的内容留空。'
+```
+
+`max_completion_tokens`只是配置示例，必须按实际服务商协议选择。不要把提高预算视作质量保证，也不要为不支持思考参数的模型强行发送该参数。
+
+## 8. 后端Python集成
+
+```python
+from pathlib import Path
+from doctransai.config import RuntimeConfig
+from doctransai.settings import env_values, setting
+from doctransai.upstream.dataproxy.workflow import run_remote
+
+config_file = Path('/secure/doctransai.env')
+values = env_values(config_file)
+config = RuntimeConfig.from_environment(env_file=config_file,
+    max_output_tokens=16000, max_steps=12, max_seconds=1200)
+
+receipt = run_remote(
+    base_url=setting('DOCTRANSAI_DATAPROXY_BASE_URL', values),
+    api_key=setting('DOCTRANSAI_DATAPROXY_API_KEY', values),
+    source=Path('/data/source.docx'),
+    template=Path('/data/template.docx'),
+    output_dir=Path('/data/runs/business-001'),
+    instruction='依据源材料填写模板，缺失内容留空并说明。',
+    config=config, mode='zip', request_id='saved-upload-001',
+)
+if receipt['status'] != 'completed':
+    # 保留任务ID和所有报告，进入业务项目的失败/待人工处理流程。
+    raise RuntimeError(receipt['status'])
+```
+
+`run_remote`是阻塞调用，适合放入业务后端的任务队列/Worker。工作区方式将`mode`改为`workspace`并传稳定`run_id`；复用解析结果时传`job_id`而不传`source`。
+
+## 9. 错误、重试和保留
+
+- 上传响应丢失：在新输出目录复用原`request_id`和同名同内容文件。不要立即换ID重复解析。
+- 已知job ID：用`--job-id`恢复；客户端超时不会取消服务端任务。
+- 质量`failed`、文件哈希/路径/schema错误：停止转换。`degraded`默认停止，只有明确业务策略允许后才放行。
+- `finish_reason=length`：截断模型输出不会执行为工具调用。检查失败报告，明确调整输出预算后在新目录重试。
+- 审计失败：保留成品及保守台账，状态为`audit_failed`；可单独运行audit，不必重新填写。
+- 回写失败：用`remote --env-file .env --publish-receipt <integration.json>`恢复，避免重复模型费用。
+- 重做审计后需要更新工作区：显式增加`--replace-audit`，以ETag仅更新审计文件；不同内容的成品仍禁止覆盖。
+- 401/403检查授权和知识库绑定；409检查幂等或资源状态；410表示资源过期；413检查大小/配额；429由业务后端有界退避。412是版本冲突，重新读取后处理，不盲目覆盖。
+
+工作区的只读资料不会被下游修改；成果和状态仅写入可写区域。ZIP本地副本和业务成品的访问控制、备份及清理由业务项目负责。
+
+## 10. 验证与能力边界
+
+本项目保留模板、来源、修改与渲染记录，但不是无人值守的业务签发系统。复杂浮动文本框、复杂嵌套表、宏、透视表、外部链接等不在完整支持范围；日期语义、角色归属、图片对应和模糊材料仍需人工检查。
+
+```bash
+uv run pytest tests/test_audit.py tests/upstream/test_service.py \
+  tests/upstream/test_remote_workflow.py tests/data_layer \
   tests/integration/test_document_tools.py \
-  tests/integration/test_independent_review.py \
-  tests/llm \
-  tests/data_layer/test_bundle_reader.py -q
+  tests/integration/test_independent_review.py tests/llm -q
 ```
 
-本轮清理后的定向回归结果和本轮实际测试命令写入 `docs/v1-cleanup-report.md`。历史 K3 对照不等同于本轮新跑；最新效率证据在 `docs/v1-lean-execution-report.md`。
-
-## 已知限制与 GitHub 上传前确认
-
-- 固定 K3 的思考耗时有明显波动；DOC 实际请求数减少但端到端变慢，不能承诺稳定低延迟。
-- XLSX 明确日期对象可以写成 Excel 日期；模型若提交普通字符串，v1 不按列名猜测改写。
-- 源文书日期不能自动继承为新文书落款；人员角色相近也不能视为已证明对应。
-- DataProxy 是输入边界；本项目不修改上游、不主动生成第二套材料模型。
-- 完整源码目录安装已支持；standalone wheel 暂不支持。
-- `V1文档审核集/`、历史报告和部分旧兼容代码仍在仓库中。它们是否可以公开到 GitHub 需要用户确认，当前不宣称样本、素材或报告具有公开许可。
-- 上传前应重新检查跟踪文件中的样本、个人信息、许可和外部路径；本轮不会替用户改变许可或删除原始材料。
-
-## DataProxy 正式解析包接入
-
-支持外层 `parse_artifact`、内层 `data_asset_pack`，所有资源以 ZIP 根目录
-`package_root` 为基准。旧 `data_asset_pack_v0` 本地 bundle 入口保留供历史任务使用；
-这不代表 DataProxy 提供两套正式服务契约。
-
-通过服务取得包（旧的单独解析命令继续支持）：
-
-```bash
-export DOCTRANSAI_DATAPROXY_BASE_URL='https://your-dataproxy-host'
-export DOCTRANSAI_DATAPROXY_API_KEY='<项目密钥>'
-uv run doctransai parse --source-file ./source.pdf --output-dir ./runs/parse-001
-```
-
-客户端仅允许 HTTPS 或本机回环 HTTP；不依赖 SSH。`parse-request.json` 在上传前保存
-幂等键，并在取得任务后保存 job_id，不保存 API Key。失败后如需重新提交同一逻辑请求，
-在新输出目录中用 `--idempotency-key` 复用原值；客户端不会自动重放上传。默认等待预算
-900 秒，单次网络 I/O 超时最多 30 秒；下载最多 1 GiB，解压总大小最多 1 GiB、文件数最多 20000。
-HTTP 错误、未知状态、任务失败、质量 failed 或哈希不符均停止。
-
-消费已下载 ZIP、解压目录或 manifest：
-
-```bash
-uv run doctransai convert \
-  --bundle ./runs/parse-001/package/manifest.json \
-  --template ./template.docx \
-  --output-dir ./runs/convert-001 \
-  --instruction '依据材料填写模板，无依据内容留空，保留既有有效内容。' \
-  --env-file ./provider.env
-```
-
-源文件可直接取包内副本，无需服务器路径。质量 degraded 的警告会进入模型材料及
-转换报告；质量 failed 不进入填写流程。转换输出不代表上游解析或业务事实认证。
-
-**历史记录，非当前阻塞：2026-09-09 联调边界**：远端 `9ee3749` 的新 TXT 包通过外层、路径和哈希验证，
-但 evidence_units 实际包含其正式 schema 禁止的字段，严格消费因此失败。
-需 DataProxy 修正 schema/产物一致性后再做真实转换验收；没有为通过测试静默删字段或放宽校验。
-
-### 原流程上的工具加固
-
-保留原有会话、自动预览和完成检查流程，新增可选 DOCX `replace_ranges`：同段多个非重叠区间的坐标和样式索引取自该操作开始时的同一快照，避免前一处替换长度改变后续位置。旧批内操作仍按顺序执行，失败整批回滚。编辑回执包含输入/输出版本与回滚标记；段落视图提前说明整段替换保护；失败报告的 `last_preview` 保存最后预览版本、文件路径、页数及是否对应当前草稿。未知页数为 null。
-
-这些是通用工具与可追溯性改进，不是已证实的速度优化。代表验证和保留范围见 `docs/v1-tool-hardening-20260910.md`。
-
-
-### 默认模型档位与填写原则
-
-普通编辑及其自检默认全程使用 `high`，不自动升级到 `max`，不增加复核调用。显式参数或环境配置仍可覆盖默认值；运行报告记录客户端实际配置。正式版恢复经前一轮六案例验证的原有编辑提示词，三条质量强化候选未采用。日期、角色、字段遗漏及图片说明等仍可能需要人工确认；客户端 high 不证明托管服务端内部采用了对应档位。
+[1.1版本与公网验收](docs/v1.1-release.md)记录5080调用集团DataProxy、ZIP/工作区真实转换、审计回写及首轮失败重试。[1.2变更说明](docs/v1.2-release.md)记录模型配置改动与本轮验证。历史报告描述当时结果，不作为所有模型和所有文件类型的效果保证。

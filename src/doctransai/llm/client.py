@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -84,8 +85,9 @@ class DoctransaiLLMConfig:
     model_name: str | None = None
     timeout_seconds: float | None = None
     max_tokens: int | None = None
-    temperature: float | None = None
+    temperature: float | str | None = None
     reasoning_effort: str | None = None
+    token_parameter: str | None = None
     max_request_body_bytes: int | None = None
     max_input_chars: int | None = None
     transport: httpx.BaseTransport | None = None
@@ -124,23 +126,23 @@ class DoctransaiLLMClient:
             default=8192,
             file_fallbacks=file_fallbacks,
         )
-        self.temperature = _resolve_float(
-            resolved.temperature,
-            DOCTRANSAI_LLM_TEMPERATURE_ENV,
-            None,
-            default=_default_temperature(self.model_name),
-            file_fallbacks=file_fallbacks,
-        )
+        from doctransai.settings import reasoning_for_model, setting
+        temperature = resolved.temperature if resolved.temperature is not None else setting(
+            DOCTRANSAI_LLM_TEMPERATURE_ENV, file_fallbacks,
+            1.0 if self.model_name.split('/')[-1] == 'kimi-k3' else 'omit')
+        self.temperature = None if temperature == 'omit' else float(temperature)
+        if self.temperature is not None and (not math.isfinite(self.temperature) or self.temperature < 0):
+            raise DoctransaiLLMConfigurationError('Temperature must be nonnegative and finite, or omit')
+        self.token_parameter = resolved.token_parameter or setting('DOCTRANSAI_LLM_TOKEN_PARAMETER', file_fallbacks, 'max_tokens')
+        if self.token_parameter not in ('max_tokens', 'max_completion_tokens'):
+            raise DoctransaiLLMConfigurationError('Invalid token parameter')
+        self.stream_usage = setting('DOCTRANSAI_LLM_STREAM_USAGE', file_fallbacks, 'true').lower() not in ('0','false','off','no')
+        if self.max_tokens <= 0 or not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise DoctransaiLLMConfigurationError('Token limit and request timeout must be positive')
         configured_effort = (resolved.reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV)
                              or file_fallbacks.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV))
-        if self.model_name.split("/")[-1] == "kimi-k3":
-            self.reasoning_effort = configured_effort or "high"
-            if self.reasoning_effort not in KIMI_K3_REASONING_EFFORTS:
-                raise DoctransaiLLMConfigurationError(
-                    "Kimi K3 reasoning_effort must be one of: low, high, max"
-                )
-        else:
-            self.reasoning_effort = None
+        effort = reasoning_for_model(self.model_name, configured_effort)
+        self.reasoning_effort = None if effort == 'omit' else effort
         self.max_request_body_bytes = resolve_llm_request_body_limit_bytes(
             resolved.max_request_body_bytes,
             file_fallbacks=file_fallbacks,
@@ -177,6 +179,12 @@ class DoctransaiLLMClient:
             temperature=self.temperature,
             reasoning_effort=self.reasoning_effort,
         )
+        if self.temperature is None:
+            payload.pop('temperature', None)
+        if self.reasoning_effort is None:
+            payload.pop('reasoning_effort', None)
+        if self.token_parameter != 'max_tokens':
+            payload[self.token_parameter] = payload.pop('max_tokens')
         estimated_request_bytes = estimate_request_body_bytes(payload)
         if (
             self.max_request_body_bytes is not None
@@ -249,11 +257,14 @@ class DoctransaiLLMClient:
     def _chat_inner(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
                     stream: bool, deadline: float | None, handle) -> dict[str, Any]:
         payload = dict(model=self.model_name, messages=messages, tools=tools,
-                       tool_choice="auto", temperature=self.temperature, max_tokens=self.max_tokens,
+                       tool_choice="auto",
                        stream=stream)
+        payload[self.token_parameter] = self.max_tokens
+        if self.temperature is not None:
+            payload['temperature'] = self.temperature
         if self.reasoning_effort is not None:
             payload["reasoning_effort"] = self.reasoning_effort
-        if stream:
+        if stream and self.stream_usage:
             payload["stream_options"] = {"include_usage": True}
         size = estimate_request_body_bytes(payload)
         if self.max_request_body_bytes is not None and size > self.max_request_body_bytes:
@@ -401,8 +412,10 @@ def build_chat_completions_payload(
         ),
     }
     model = model_name or os.environ.get(DOCTRANSAI_LLM_MODEL_ENV) or DEFAULT_DOCTRANSAI_LLM_MODEL
-    if model.split("/")[-1] == "kimi-k3":
-        payload["reasoning_effort"] = reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV) or "high"
+    from doctransai.settings import reasoning_for_model
+    effort = reasoning_for_model(model, reasoning_effort or os.environ.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV))
+    if effort != 'omit':
+        payload['reasoning_effort'] = effort
     return payload
 
 

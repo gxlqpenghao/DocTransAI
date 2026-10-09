@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from doctransai.config import RuntimeConfig
+from doctransai.settings import add_model_arguments, model_overrides, env_values, setting
 from .workflow import run_remote, publish_workspace
 
 
@@ -26,14 +27,15 @@ def main(argv):
     p.add_argument('--env-file', type=Path)
     p.add_argument('--timeout-seconds', type=float, default=1800, help='DataProxy stage budget')
     p.add_argument('--conversion-timeout', type=float, default=900)
-    p.add_argument('--max-output-tokens', type=int, default=16000,
-                   help='Per-request K3 output budget including reasoning; default 16000')
+    p.add_argument('--max-steps', type=int, default=12)
     p.add_argument('--render-script', type=Path)
     p.add_argument('--render-python')
-    p.add_argument('--reasoning-effort', choices=['low', 'high', 'max'], default='high')
+    add_model_arguments(p)
     a = p.parse_args(argv)
-    key = os.environ.get('DOCTRANSAI_DATAPROXY_API_KEY', '')
     try:
+        values = env_values(a.env_file)
+        key = setting('DOCTRANSAI_DATAPROXY_API_KEY', values, '')
+        a.base_url = a.base_url or setting('DOCTRANSAI_DATAPROXY_BASE_URL', values)
         if not a.base_url or not key:
             raise ValueError('Configure DOCTRANSAI_DATAPROXY_BASE_URL and DOCTRANSAI_DATAPROXY_API_KEY')
         common = dict(base_url=a.base_url, api_key=key, timeout=a.timeout_seconds)
@@ -43,8 +45,8 @@ def main(argv):
             if not a.template or not a.output_dir or not a.instruction:
                 raise ValueError('Template, output directory and instruction are required')
             config = RuntimeConfig.from_environment(env_file=a.env_file, render_script=a.render_script,
-                render_python=a.render_python, reasoning_effort=a.reasoning_effort, max_seconds=a.conversion_timeout,
-                max_output_tokens=a.max_output_tokens)
+                render_python=a.render_python, max_seconds=a.conversion_timeout, max_steps=a.max_steps,
+                _default_output_tokens=16000, **model_overrides(a))
             result = run_remote(source=a.source_file, job_id=a.job_id, mode=a.mode,
                 request_id=a.request_id, run_id=a.run_id, template=a.template, output_dir=a.output_dir,
                 workspace_id=a.workspace_id,

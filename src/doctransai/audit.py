@@ -194,7 +194,7 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
     if not semantic:
         save_audit(run_dir, audit)
         return audit
-    config = config or RuntimeConfig.from_environment(max_output_tokens=16000)
+    config = config or RuntimeConfig.from_environment(_default_output_tokens=16000)
     try:
         report = json.loads((run_dir / 'review.json').read_text())
         if report.get('execution_status') != 'completed' or not audit['fields']:
@@ -206,7 +206,8 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
         source = SourceView(read_source_input(Path(task['bundle_path']), run_dir), document_id=task.get('document_id'),
                             source_file=Path(task['source_file']) if task.get('source_file') else None)
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
-            model_name=config.model, reasoning_effort=config.reasoning_effort, max_tokens=config.max_output_tokens))
+            model_name=config.model, reasoning_effort=config.reasoning_effort, max_tokens=config.max_output_tokens,
+            temperature=config.temperature, timeout_seconds=config.llm_timeout_seconds, token_parameter=config.token_parameter))
         payload = {k: audit[k] for k in ('fields','operations','source_context','instruction','parse_quality','conversion_issues')}
         audit['visual_coverage'] = dict(total_pages=len(report.get('output_pages', [])), supplied_pages=min(8,len(report.get('output_pages', []))))
         payload['visual_coverage'] = audit['visual_coverage']
@@ -228,7 +229,7 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
         assessments = json.loads(arguments) if isinstance(arguments, str) else arguments
         audit['model_assessments'] = assessments
         validate_assessments(audit, assessments['assessments'], source)
-        audit.update(status='assessed', assessment_basis='fresh-context K3 field assessment with deterministic coverage/reference checks; not human verification',
+        audit.update(status='assessed', assessment_basis='fresh-context model field assessment with deterministic coverage/reference checks; not human verification',
                      model=config.model, reasoning_effort=config.reasoning_effort,
                      assessment_seconds=round(time.monotonic()-started,3))
     except Exception as exc:
@@ -243,13 +244,14 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
 
 def main(argv):
     import argparse
+    from doctransai.settings import add_model_arguments, model_overrides
     p = argparse.ArgumentParser(prog='doctransai audit')
     p.add_argument('--run-dir', required=True, type=Path)
     p.add_argument('--env-file', type=Path)
-    p.add_argument('--max-output-tokens', type=int, default=16000)
+    add_model_arguments(p)
     p.add_argument('--timeout-seconds', type=float, default=900)
     a = p.parse_args(argv)
     result = audit_document(a.run_dir, config=RuntimeConfig.from_environment(env_file=a.env_file,
-        max_output_tokens=a.max_output_tokens, max_seconds=a.timeout_seconds))
+        _default_output_tokens=16000, max_seconds=a.timeout_seconds, **model_overrides(a)))
     print(json.dumps({'audit_status': result['status'], 'counts': result['counts']}, ensure_ascii=False))
     return 0 if result['status'] == 'assessed' else 1

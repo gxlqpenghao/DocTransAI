@@ -131,7 +131,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
         runtime.prepared_source_images = prepared_source_image_paths
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
                 model_name=config.model, max_tokens=config.max_output_tokens,
-                reasoning_effort=config.reasoning_effort))
+                reasoning_effort=config.reasoning_effort, temperature=config.temperature,
+                timeout_seconds=config.llm_timeout_seconds, token_parameter=config.token_parameter))
         diagnostics = None
         if config.model_diagnostics:
             # Local observation only: attaches to the client, records requests,
@@ -142,7 +143,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             diagnostics.current_phase = "conversion"
         report["model"] = getattr(client, "model_name", config.model)
         report["llm_settings"] = {key: getattr(client, key, None) for key in
-                                  ("model_name", "temperature", "max_tokens", "timeout_seconds", "reasoning_effort")}
+                                  ("model_name", "temperature", "max_tokens", "timeout_seconds", "reasoning_effort", "token_parameter")}
         agent_result = run_agent(client, messages, runtime, config, trace_path, deadline, progress, review_input=initial) if existing_document is None else {}
         if config.review_enabled:
             independent = review_and_repair(source, editor, previewer, initial, client, config, output_dir, deadline, progress)

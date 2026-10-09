@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from doctransai import __version__
+from doctransai.settings import add_model_arguments, model_overrides, env_values, setting
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     parse_parser.add_argument("--output-dir", type=Path, required=True)
     parse_parser.add_argument("--base-url", default=os.environ.get("DOCTRANSAI_DATAPROXY_BASE_URL"))
     parse_parser.add_argument("--idempotency-key")
+    parse_parser.add_argument('--env-file', type=Path)
     parse_parser.add_argument("--timeout-seconds", type=float, default=900)
     for command in ("convert", "review"):
         convert_parser = commands.add_parser(command, help="Convert materials or independently review an existing output.")
@@ -44,9 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         convert_parser.add_argument("--document-id")
         convert_parser.add_argument("--source-ref", action="append", default=[])
         convert_parser.add_argument("--env-file", type=Path)
-        convert_parser.add_argument("--model", help="Compatibility option; only kimi-k3 is supported")
-        convert_parser.add_argument("--reasoning-effort", choices=("low", "high", "max"),
-                                    help="Kimi K3 thinking effort; default is high")
+        add_model_arguments(convert_parser)
         convert_parser.add_argument("--max-steps", type=int, default=12)
         convert_parser.add_argument("--review-max-steps", type=int, default=6)
         convert_parser.add_argument("--repair-max-steps", type=int, default=4)
@@ -62,10 +62,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "parse":
         from doctransai.upstream.dataproxy.client import fetch_parse_artifact
         try:
+            values = env_values(args.env_file)
+            args.base_url = args.base_url or setting('DOCTRANSAI_DATAPROXY_BASE_URL', values)
             if not args.base_url:
                 raise ValueError("Set --base-url or DOCTRANSAI_DATAPROXY_BASE_URL")
             manifest = fetch_parse_artifact(args.source_file, args.output_dir, base_url=args.base_url,
-                api_key=os.environ.get("DOCTRANSAI_DATAPROXY_API_KEY", ""),
+                api_key=setting('DOCTRANSAI_DATAPROXY_API_KEY', values, ''),
                 idempotency_key=args.idempotency_key, timeout=args.timeout_seconds)
             print(json.dumps({"manifest": str(manifest)}, ensure_ascii=False))
             return 0
@@ -82,8 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             explicit_review = args.command == "review" or bool(getattr(args, "review", False))
             if explicit_review and getattr(args, "skip_review", False):
                 raise ValueError("--review and --skip-review cannot be used together")
-            config = RuntimeConfig.from_environment(env_file=args.env_file, model=args.model,
-                    reasoning_effort=args.reasoning_effort,
+            config = RuntimeConfig.from_environment(env_file=args.env_file, **model_overrides(args),
                     review_enabled=explicit_review, review_max_steps=args.review_max_steps,
                     repair_max_steps=args.repair_max_steps, max_repair_rounds=args.max_repair_rounds,
                     max_steps=args.max_steps, max_seconds=args.timeout_seconds,

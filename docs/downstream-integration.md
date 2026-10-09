@@ -1,18 +1,20 @@
-# DocTransAI 1.1 项目接入与运行
+# DocTransAI 项目接入与运行
 
-DocTransAI安装在业务项目后端。DataProxy负责源文档解析、所属知识库入库及交付；DocTransAI调用自己的K3配置填写DOCX/XLSX模板。选择工作区不会把模型或转换程序放到集团服务器执行。
+当前1.2版本的配置、模型选择与完整示例以[README](../README.md)为准。
+
+DocTransAI安装在业务项目后端。DataProxy负责源文档解析、所属知识库入库及交付；DocTransAI调用业务后端配置的LLM填写DOCX/XLSX模板。选择工作区不会把模型或转换程序放到集团服务器执行。
 
 ## 环境与交付
 
 使用完整源码包，Python 3.12，执行 `uv sync --locked`。原有 `contracts/` 与 `src/` 必须同时保留。另需LibreOffice Writer/Calc、Poppler、中文字体、可工作的Codex `render_docx.py` 及其Python依赖 `pdf2image`。macOS遵循本机的中文字体修复与bundled renderer要求；Linux容器使用自身安装的办公运行库。保留 `kimi-k3/high` 默认配置。
 
-仓库提供独立 `Dockerfile`，不依赖DataProxy镜像。构建 `docker build -t doctransai:1.1.0 .`，将可用的renderer目录只读挂载到 `/renderer`，工作目录挂载到 `/work`。配置通过受限权限的 `--env-file` 传入，不能写进镜像。
+仓库提供独立 `Dockerfile`，不依赖DataProxy镜像。构建 `docker build -t doctransai:1.2.0 .`，将可用的renderer目录只读挂载到 `/renderer`，工作目录挂载到 `/work`。配置通过受限权限的 `--env-file` 传入，不能写进镜像。
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --env-file /secure/doctransai.env \
   -v /absolute/renderer-directory:/renderer:ro \
   -v /absolute/business-data:/work \
-  doctransai:1.1.0 remote --mode zip \
+  doctransai:1.2.0 remote --mode zip \
   --source-file /work/source.docx --template /work/template.docx \
   --output-dir /work/runs/example \
   --instruction '依据源材料填写模板，缺少依据的内容留空。'
@@ -23,14 +25,15 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --env-file /secure/doctr
 ```dotenv
 DOCTRANSAI_DATAPROXY_BASE_URL=https://dataproxy.gxlq.com.cn
 DOCTRANSAI_DATAPROXY_API_KEY=<项目Key>
-DOCTRANSAI_LLM_BASE_URL=<K3兼容接口基址>
-DOCTRANSAI_LLM_API_KEY=<K3凭证>
-DOCTRANSAI_LLM_REASONING_EFFORT=high
+DOCTRANSAI_LLM_BASE_URL=<Chat Completions兼容接口基址>
+DOCTRANSAI_LLM_API_KEY=<LLM凭证>
+DOCTRANSAI_LLM_MODEL=kimi-k3
+DOCTRANSAI_LLM_REASONING_EFFORT=auto
 DOCTRANSAI_DOCX_RENDERER=/renderer/render_docx.py
 DOCTRANSAI_RENDER_PYTHON=python
 ```
 
-源码安装时显式导出环境变量；`--env-file` 是既有K3客户端的配置文件参数，不负责将整个文件加载进进程环境。Docker的 `--env-file` 会提供上述全部变量。项目Key不能放前端。运行自检包括 `doctransai --version`、`doctransai remote --help`，以及用真实中文模板运行renderer并检查PNG与PDF字体。
+源码安装时显式导出环境变量；1.2起，`--env-file` 同时读取DataProxy、LLM与渲染设置，但不修改进程全局环境。Docker的 `--env-file` 会提供上述全部变量。项目Key不能放前端。运行自检包括 `doctransai --version`、`doctransai remote --help`，以及用真实中文模板运行renderer并检查PNG与PDF字体。
 
 ## ZIP方式
 
@@ -58,7 +61,7 @@ doctransai remote --mode workspace \
 
 ## 字段审计交付
 
-每次转换同时保存 `audit.json`、`audit.html`，包含模板定位、修改前后内容、来源引用、操作结果及失败/回滚记录。原 `convert` 先输出保守审计台账，状态为pending；`remote` 继续用独立上下文K3进行字段语义审计，再发布成品与报告。审计不是再次编辑文档，也不是完整业务签发。
+每次转换同时保存 `audit.json`、`audit.html`，包含模板定位、修改前后内容、来源引用、操作结果及失败/回滚记录。原 `convert` 先输出保守审计台账，状态为pending；`remote` 继续用独立上下文模型进行字段语义审计，再发布成品与报告。审计不是再次编辑文档，也不是完整业务签发。
 
 实际填报位置按 `filled_high`（已填且高确信度）、`filled_low`（已填且低确信度）、`unfilled`（未填）分类；标题、标签、空白版式归 `not_field` 单独计数。模型必须覆盖全部候选位置，并给出字段名、理由、证据及人工核对建议。高确信度还需有可核验的原生引用和直接原文摘录；引用存在本身不能提升确信度。确信度是模型判断，不提供伪精确百分比。
 

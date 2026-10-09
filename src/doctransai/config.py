@@ -23,7 +23,10 @@ class RuntimeConfig:
     auto_preview_max_pages: int = 8
     env_file: Path | None = None
     model: str = "kimi-k3"
-    reasoning_effort: str = "high"
+    reasoning_effort: str | None = None
+    temperature: float | str | None = None
+    llm_timeout_seconds: float | None = None
+    token_parameter: str | None = None
     render_script: Path | None = None
     render_python: str = sys.executable
     pdftoppm: str = "pdftoppm"
@@ -41,28 +44,41 @@ class RuntimeConfig:
                self.initial_source_chars, self.initial_source_pages, self.initial_source_assets,
                self.initial_source_max_bytes, self.auto_preview_max_pages, self.render_timeout) <= 0:
             raise ValueError("Runtime budgets must be positive")
-        if self.model != "kimi-k3":
-            raise ValueError("The v1 document-tools path uses the fixed kimi-k3 model")
-        if self.reasoning_effort not in ("low", "high", "max"):
-            raise ValueError("reasoning_effort must be one of: low, high, max")
+        if not isinstance(self.model, str) or not self.model.strip():
+            raise ValueError('Model must be a nonempty provider model ID')
+        from .settings import reasoning_for_model
+        object.__setattr__(self, 'reasoning_effort', reasoning_for_model(self.model, self.reasoning_effort))
+        if self.temperature not in (None, 'omit') and (not math.isfinite(float(self.temperature)) or float(self.temperature) < 0):
+            raise ValueError('Temperature must be a nonnegative finite number or omit')
+        if self.llm_timeout_seconds is not None and (not math.isfinite(self.llm_timeout_seconds) or self.llm_timeout_seconds <= 0):
+            raise ValueError('LLM timeout must be positive and finite')
+        if self.token_parameter not in (None, 'max_tokens', 'max_completion_tokens'):
+            raise ValueError('Token parameter must be max_tokens or max_completion_tokens')
 
     @classmethod
     def from_environment(cls, **overrides):
-        env_file = overrides.get("env_file")
-        file_effort = None
-        if env_file is not None and Path(env_file).is_file():
-            for raw_line in Path(env_file).read_text(encoding="utf-8").splitlines():
-                key, separator, value = raw_line.partition("=")
-                if separator and key.strip() == "DOCTRANSAI_LLM_REASONING_EFFORT":
-                    file_effort = value.strip().strip('"').strip("'")
-                    break
-        values = dict(render_script=Path(os.environ["DOCTRANSAI_DOCX_RENDERER"]).expanduser()
-                      if os.environ.get("DOCTRANSAI_DOCX_RENDERER") else None,
-                      render_python=os.environ.get("DOCTRANSAI_RENDER_PYTHON", sys.executable),
-                      pdftoppm=os.environ.get("DOCTRANSAI_PDFTOPPM", "pdftoppm"),
-                      render_revision=os.environ.get("DOCTRANSAI_RENDER_REVISION", "1"),
-                      reasoning_effort=os.environ.get("DOCTRANSAI_LLM_REASONING_EFFORT") or file_effort or "high",
-                      model_diagnostics=os.environ.get("DOCTRANSAI_MODEL_DIAGNOSTICS", "").strip().lower()
-                      in ("1", "true", "on", "yes"))
+        from .settings import env_values, setting
+        file_values = env_values(overrides.get('env_file'))
+        fields = {'DOCTRANSAI_LLM_MODEL':'model', 'DOCTRANSAI_LLM_MAX_TOKENS':'max_output_tokens',
+                  'DOCTRANSAI_LLM_REASONING_EFFORT':'reasoning_effort', 'DOCTRANSAI_LLM_TEMPERATURE':'temperature',
+                  'DOCTRANSAI_LLM_TIMEOUT_SECONDS':'llm_timeout_seconds', 'DOCTRANSAI_LLM_TOKEN_PARAMETER':'token_parameter'}
+        def get(name, default=None):
+            explicit = overrides.get(fields.get(name))
+            return explicit if explicit is not None else setting(name, file_values, default)
+        default_tokens = overrides.pop('_default_output_tokens', 5000)
+        renderer = get('DOCTRANSAI_DOCX_RENDERER')
+        temperature = get('DOCTRANSAI_LLM_TEMPERATURE')
+        values = dict(env_file=Path(get('DOCTRANSAI_ENV_FILE')) if get('DOCTRANSAI_ENV_FILE') else None,
+                      model=get('DOCTRANSAI_LLM_MODEL', 'kimi-k3'),
+                      max_output_tokens=int(get('DOCTRANSAI_LLM_MAX_TOKENS', default_tokens)),
+                      reasoning_effort=get('DOCTRANSAI_LLM_REASONING_EFFORT'),
+                      temperature=temperature if temperature in (None, 'omit') else float(temperature),
+                      llm_timeout_seconds=float(get('DOCTRANSAI_LLM_TIMEOUT_SECONDS', 180)),
+                      token_parameter=get('DOCTRANSAI_LLM_TOKEN_PARAMETER', 'max_tokens'),
+                      render_script=Path(renderer).expanduser() if renderer else None,
+                      render_python=get('DOCTRANSAI_RENDER_PYTHON', sys.executable),
+                      pdftoppm=get('DOCTRANSAI_PDFTOPPM', 'pdftoppm'),
+                      render_revision=get('DOCTRANSAI_RENDER_REVISION', '1'),
+                      model_diagnostics=get('DOCTRANSAI_MODEL_DIAGNOSTICS', '').lower() in ('1','true','on','yes'))
         values.update({k: v for k, v in overrides.items() if v is not None})
         return cls(**values)
