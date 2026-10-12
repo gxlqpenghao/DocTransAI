@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.env.*
+!.env.example
+outputs
+runtime
+tmp
+artifacts
+six-case-baseline
+V1文档审核集
+tests
+*.secret
+secrets

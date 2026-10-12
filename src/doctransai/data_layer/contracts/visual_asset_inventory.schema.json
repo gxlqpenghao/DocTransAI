@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/visual_asset_inventory.schema.json",
+  "title": "DataProxy Visual Asset Inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "document_id",
+    "source_path",
+    "asset_type",
+    "asset_source",
+    "quality"
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack"},
+    "visual_asset_id": {"type": "string", "minLength": 1},
+    "asset_id": {"type": "string", "minLength": 1},
+    "source_asset_id": {"type": "string", "minLength": 1},
+    "document_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "asset_type": {"enum": ["image", "figure", "chart", "diagram", "scanned_page"]},
+    "asset_source": {"type": ["string", "null"]},
+    "source_ref": {"type": ["string", "null"]},
+    "path": {"type": ["string", "null"]},
+    "checksum": {"type": ["string", "null"]},
+    "caption": {"type": ["string", "null"]},
+    "locator": {"type": "object", "additionalProperties": true},
+    "page_anchor": {"type": ["string", "null"]},
+    "bbox": {
+      "anyOf": [
+        {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        {"type": "null"}
+      ]
+    },
+    "nearby_section_id": {"type": ["string", "null"]},
+    "nearby_table_id": {"type": ["string", "null"]},
+    "sheet_name": {"type": ["string", "null"]},
+    "cell_anchor": {"type": ["string", "null"]},
+    "cell_range": {"type": ["string", "null"]},
+    "row_index": {"type": ["integer", "null"]},
+    "column_index": {"type": ["integer", "null"]},
+    "related_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "visual_evidence_projection_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "page_co_located_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "nearby_text_before": {"type": ["string", "null"]},
+    "nearby_text_after": {"type": ["string", "null"]},
+    "related_evidence_preview": {"type": ["string", "null"]},
+    "source_block_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "source_layout_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "quality": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["issues"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    }
+  },
+  "anyOf": [
+    {"required": ["visual_asset_id"]},
+    {"required": ["asset_id"]}
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/parsed_document_bundle.schema.json",
+  "title": "DataProxy ParsedDocumentBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bundle_type",
+    "contract_version",
+    "database_writes",
+    "generated_at",
+    "capabilities",
+    "components",
+    "summary",
+    "reports",
+    "issue_buckets",
+    "documents",
+    "parse_errors"
+  ],
+  "properties": {
+    "bundle_type": {"const": "ParsedDocumentBundle"},
+    "contract_version": {"const": "data_asset_pack"},
+    "database_writes": {"const": false},
+    "generated_at": {"type": "string", "minLength": 1},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {"type": "boolean"}
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/component"}
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "reports": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "issue_buckets": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "documents": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "parse_errors": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "path"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "path": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

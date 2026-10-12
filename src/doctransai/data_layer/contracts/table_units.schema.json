@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack/table_units.schema.json",
+  "title": "DataProxy Table Unit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "table_id",
+    "document_id",
+    "source_path",
+    "table_title"
+  ],
+  "properties": {
+    "contract_version": {"const": "data_asset_pack"},
+    "table_id": {"type": "string", "minLength": 1},
+    "document_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "table_title": {"type": ["string", "null"]},
+    "locator": {"type": "object", "additionalProperties": true},
+    "page_anchor": {"type": ["string", "null"]},
+    "table_json": {"type": ["object", "null"]},
+    "full_table_text": {"type": ["string", "null"]},
+    "table_ref": {"type": ["string", "null"]},
+    "section_id": {"type": ["string", "null"]},
+    "logical_section_id": {"type": ["string", "null"]},
+    "parser_signals_present": {"type": "boolean"},
+    "table_identity": {"type": "object", "additionalProperties": true},
+    "related_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "source_block_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "source_layout_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "quality": {"type": "object", "additionalProperties": true}
+  },
+  "anyOf": [
+    {
+      "required": ["table_json"],
+      "properties": {"table_json": {"type": "object", "minProperties": 1}}
+    },
+    {
+      "required": ["full_table_text"],
+      "properties": {"full_table_text": {"type": "string", "minLength": 1}}
+    },
+    {
+      "required": ["table_ref"],
+      "properties": {"table_ref": {"type": "string", "minLength": 1}}
+    }
+  ]
+}

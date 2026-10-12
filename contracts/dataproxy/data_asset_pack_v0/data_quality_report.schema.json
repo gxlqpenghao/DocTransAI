@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataproxy.local/contracts/data_asset_pack_v0/data_quality_report.schema.json",
+  "title": "DataProxy Data Quality Report v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "generated_at",
+    "summary",
+    "issue_buckets",
+    "quality_gate",
+    "issues",
+    "samples"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "data_asset_pack_v0"
+    },
+    "generated_at": {
+      "type": ["string", "null"]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_count",
+        "section_count",
+        "table_count",
+        "evidence_count",
+        "visual_asset_count",
+        "qa_seed_count",
+        "issue_count"
+      ],
+      "properties": {
+        "document_count": {"type": "integer", "minimum": 0},
+        "section_count": {"type": "integer", "minimum": 0},
+        "table_count": {"type": "integer", "minimum": 0},
+        "evidence_count": {"type": "integer", "minimum": 0},
+        "visual_asset_count": {"type": "integer", "minimum": 0},
+        "qa_seed_count": {"type": "integer", "minimum": 0},
+        "issue_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "issue_buckets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "quality_gate": {"$ref": "#/$defs/quality_gate"},
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue"}
+    },
+    "samples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["code", "sample"],
+        "properties": {
+          "code": {"$ref": "#/$defs/issue_code"},
+          "sample": {"type": "object"}
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "parse_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["info", "warning", "error"]
+    },
+    "issue_code": {
+      "enum": [
+        "missing_document_id",
+        "missing_source_path",
+        "missing_source_checksum",
+        "empty_text",
+        "missing_locator",
+        "invalid_char_range",
+        "duplicate_evidence_text",
+        "cross_document_boilerplate_text",
+        "orphan_evidence",
+        "table_empty",
+        "table_missing_title",
+        "table_title_absent_accepted",
+        "section_missing_title",
+        "section_level_anomaly",
+        "parser_signals_missing",
+        "parser_signals_not_exported",
+        "parser_signals_absent_on_high_value_block",
+        "source_truth_mismatch",
+        "visual_asset_unregistered",
+        "asset_unlinked",
+        "referenced_asset_missing",
+        "visual_asset_nearby",
+        "visual_context_required",
+        "image_text_not_extracted",
+        "chart_or_diagram_not_parsed",
+        "scanned_page_text_low_confidence",
+        "qa_answer_unsupported",
+        "qa_locator_unresolvable",
+        "qa_visual_context_unmarked",
+        "export_contract_violation"
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": {"$ref": "#/$defs/issue_code"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "message": {"type": "string"},
+        "field": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
+        "asset_id": {"type": ["string", "null"]},
+        "qa_id": {"type": ["string", "null"]}
+      }
+    },
+    "quality_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled_document_count",
+        "initial_issue_count",
+        "action_count",
+        "execution_count",
+        "residual_issue_count",
+        "initial_issue_buckets",
+        "residual_issue_buckets",
+        "action_buckets",
+        "execution_status_buckets",
+        "structure_gate"
+      ],
+      "properties": {
+        "enabled_document_count": {"type": "integer", "minimum": 0},
+        "initial_issue_count": {"type": "integer", "minimum": 0},
+        "action_count": {"type": "integer", "minimum": 0},
+        "execution_count": {"type": "integer", "minimum": 0},
+        "residual_issue_count": {"type": "integer", "minimum": 0},
+        "initial_issue_buckets": {"$ref": "#/$defs/count_buckets"},
+        "residual_issue_buckets": {"$ref": "#/$defs/count_buckets"},
+        "action_buckets": {"$ref": "#/$defs/count_buckets"},
+        "execution_status_buckets": {"$ref": "#/$defs/count_buckets"},
+        "structure_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initial_issue_count",
+            "residual_issue_count",
+            "initial_issue_buckets",
+            "residual_issue_buckets"
+          ],
+          "properties": {
+            "initial_issue_count": {"type": "integer", "minimum": 0},
+            "residual_issue_count": {"type": "integer", "minimum": 0},
+            "initial_issue_buckets": {"$ref": "#/$defs/count_buckets"},
+            "residual_issue_buckets": {"$ref": "#/$defs/count_buckets"}
+          }
+        }
+      }
+    },
+    "count_buckets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.secret
+credentials*.json
+secrets/
+
+# Python / test caches
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+
+# Local/generated DocTransAI artifacts
+artifacts/
+outputs/
+tmp/
+runtime/
+文件类型汇总/
+
+# Build outputs and logs
+build/
+dist/
+*.log
+
+# Keep business data and internal verification material out of this public repository.
+V1文档审核集/
+six-case-baseline/
+docs/*acceptance*
+docs/v1.*-release.md
