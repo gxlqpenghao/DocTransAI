@@ -63,7 +63,7 @@ Dockerfile安装办公工具、中文字体和renderer的`pdf2image`依赖。ren
 
 ```dotenv
 # DataProxy：管理员已将项目Key绑定到相应知识库
-DOCTRANSAI_DATAPROXY_BASE_URL=https://dataproxy.gxlq.com.cn
+DOCTRANSAI_DATAPROXY_BASE_URL=https://win-efl8gf6cofj.taila0c57a.ts.net
 DOCTRANSAI_DATAPROXY_API_KEY=<我们提供的项目授权Key>
 
 # LLM：填写服务商的Chat Completions基址、Key和模型ID

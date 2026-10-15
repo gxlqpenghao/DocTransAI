@@ -23,7 +23,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --env-file /secure/doctr
 必要配置：
 
 ```dotenv
-DOCTRANSAI_DATAPROXY_BASE_URL=https://dataproxy.gxlq.com.cn
+DOCTRANSAI_DATAPROXY_BASE_URL=https://win-efl8gf6cofj.taila0c57a.ts.net
 DOCTRANSAI_DATAPROXY_API_KEY=<项目Key>
 DOCTRANSAI_LLM_BASE_URL=<Chat Completions兼容接口基址>
 DOCTRANSAI_LLM_API_KEY=<LLM凭证>
@@ -36,6 +36,10 @@ DOCTRANSAI_RENDER_PYTHON=python
 源码安装时显式导出环境变量；1.2起，`--env-file` 同时读取DataProxy、LLM与渲染设置，但不修改进程全局环境。Docker的 `--env-file` 会提供上述全部变量。项目Key不能放前端。运行自检包括 `doctransai --version`、`doctransai remote --help`，以及用真实中文模板运行renderer并检查PNG与PDF字体。
 
 ## ZIP方式
+
+服务迁移时，在后端配置中更新 `DOCTRANSAI_DATAPROXY_BASE_URL` 和 `DOCTRANSAI_DATAPROXY_API_KEY`，不要把地址或凭证写进前端。Base URL使用管理员最新文档提供的完整HTTPS地址，不追加 `/api`。可先携带项目Key请求 `GET /api/v1/knowledge` 验证绑定与限额；上游的检索能力入口是 `GET /api/v1/retrieval/capabilities`，但模板转换不要求发起检索或问答。
+
+实际源文件上限同时受本地测试页100 MiB限制及知识库返回的 `limits.upload_bytes` 约束，服务端超限返回413。新版解析交付manifest允许 `authorization`（过滤说明、遗漏项目、授权版本）和 `source[].available`；客户端兼容这些声明，继续严格验证字段、路径及文件哈希。若明确标记原件不可用，转换会停止，不会忽略授权标记后使用本地同名文件。旧版未带这些可选字段的交付包仍可读取。
 
 ```bash
 doctransai remote --mode zip \
