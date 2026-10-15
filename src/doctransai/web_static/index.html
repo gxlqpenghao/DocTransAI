@@ -3,8 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DocTransAI · 本地测试台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
 <body>
 <header class="topbar"><a class="brand" href="/"><span class="brand-icon">D<span>↗</span></span><strong>DocTransAI</strong><span class="brand-divider"></span><span class="brand-sub">本地测试台</span></a><div class="local-badge"><span class="dot"></span>仅本地访问 <span id="version"></span></div></header>
-<main>
-<div class="intro"><div><p class="eyebrow">DOCUMENT CONVERSION</p><h1>从源材料，到目标文档。</h1><p class="intro-note">上传材料与模板，完成智能填写，并用字段审计检查每一处结果。</p></div><div class="flow-note"><span>源文档 → DataProxy解析</span><span>模板 → 本地填写</span></div></div>
+<main aria-label="文档转换测试">
 <section class="environment" aria-label="后端配置"><div id="config-status" role="status">正在检查后端配置…</div><button id="refresh-config" class="text-button" type="button">重新检查 <span aria-hidden="true">↻</span></button></section>
 <details id="config-help" class="config-help"><summary>配置说明：服务地址与密钥只在后端填写</summary><p>请根据仓库中的 <code>.env.example</code> 配置DataProxy授权、LLM和文档渲染器，使用以下命令启动：</p><pre>uv run doctransai web --env-file .env</pre><p>修改配置文件后点击“重新检查”；修改进程环境变量后需重启服务。配置检查不代表远程服务已经连通。</p></details>
 <div class="workspace">

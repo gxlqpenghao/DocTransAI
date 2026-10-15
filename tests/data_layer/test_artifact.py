@@ -69,6 +69,31 @@ def test_failed_quality_rejected(tmp_path):
     with pytest.raises(ValueError,match='quality failed'):read_artifact(p)
 
 
+def test_authorization_metadata_and_available_source_are_supported(tmp_path):
+    root,_=make_package(tmp_path);p=root/'manifest.json';m=json.loads(p.read_text())
+    m['authorization']={'filtered':True,'omitted':[],'grant_version':1}
+    m['source'][0]['available']=True;p.write_text(json.dumps(m))
+    assert read_artifact(p).artifact_manifest['authorization']==m['authorization']
+
+
+def test_unavailable_source_is_not_used_even_if_file_is_present(tmp_path):
+    root,_=make_package(tmp_path);p=root/'manifest.json';m=json.loads(p.read_text())
+    m['source'][0]['available']=False;p.write_text(json.dumps(m))
+    with pytest.raises(ValueError,match='current authorization'):read_artifact(p)
+
+
+@pytest.mark.parametrize('authorization',[
+    {'filtered':False,'omitted':[],'grant_version':1},
+    {'filtered':True,'omitted':[],'grant_version':0},
+    {'filtered':True,'omitted':[],'grant_version':1,'unexpected':True},
+])
+def test_authorization_contract_remains_strict(tmp_path,authorization):
+    from jsonschema.exceptions import ValidationError
+    root,_=make_package(tmp_path);p=root/'manifest.json';m=json.loads(p.read_text())
+    m['authorization']=authorization;p.write_text(json.dumps(m))
+    with pytest.raises(ValidationError):read_artifact(p)
+
+
 def test_zip_traversal_not_extracted(tmp_path):
     p=tmp_path/'bad.zip'
     with zipfile.ZipFile(p,'w') as z:z.writestr('../outside','bad')

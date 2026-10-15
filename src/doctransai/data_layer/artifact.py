@@ -90,6 +90,8 @@ def read_artifact(manifest_path: Path):
     for schema_path in manifest.get("schemas", {}).values():
         required(schema_path)
     for source in manifest['source']:
+        if source.get('available') is False:
+            raise ValueError('DataProxy source file is unavailable under the current authorization; conversion requires the original source')
         p = required(source['path'])
         if source['sha256'] != _hash(p) or source['size_bytes'] != p.stat().st_size:
             raise ValueError('Source integrity mismatch')
