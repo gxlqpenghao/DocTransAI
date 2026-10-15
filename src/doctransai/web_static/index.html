@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DocTransAI · 本地测试台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/"><span class="brand-icon">D<span>↗</span></span><strong>DocTransAI</strong><span class="brand-divider"></span><span class="brand-sub">本地测试台</span></a><div class="local-badge"><span class="dot"></span>仅本地访问 <span id="version"></span></div></header>
+<main>
+<div class="intro"><div><p class="eyebrow">DOCUMENT CONVERSION</p><h1>从源材料，到目标文档。</h1><p class="intro-note">上传材料与模板，完成智能填写，并用字段审计检查每一处结果。</p></div><div class="flow-note"><span>源文档 → DataProxy解析</span><span>模板 → 本地填写</span></div></div>
+<section class="environment" aria-label="后端配置"><div id="config-status" role="status">正在检查后端配置…</div><button id="refresh-config" class="text-button" type="button">重新检查 <span aria-hidden="true">↻</span></button></section>
+<details id="config-help" class="config-help"><summary>配置说明：服务地址与密钥只在后端填写</summary><p>请根据仓库中的 <code>.env.example</code> 配置DataProxy授权、LLM和文档渲染器，使用以下命令启动：</p><pre>uv run doctransai web --env-file .env</pre><p>修改配置文件后点击“重新检查”；修改进程环境变量后需重启服务。配置检查不代表远程服务已经连通。</p></details>
+<div class="workspace">
+<section class="panel input-panel"><div class="panel-heading"><div><p class="eyebrow">01 / INPUT</p><h2>准备转换材料</h2></div><span class="subtle">两份文件 · 一个任务</span></div>
+<form id="conversion-form">
+<div class="uploads">
+<label class="upload-card" id="source-drop" for="source"><span class="file-symbol" aria-hidden="true">↥</span><span class="upload-title">源文档</span><span class="upload-desc">需要提取内容的原始材料</span><span class="file-info" id="source-info">点击选择，或拖拽文件到这里</span><span class="formats">PDF、DOC/DOCX、Excel、PPT、文本、图片等<br>最多100 MiB · 将提交至DataProxy解析</span><input id="source" name="source" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xlsm,.txt,.md,.markdown,.html,.htm,.png,.jpg,.jpeg" required></label>
+<label class="upload-card template-card" id="template-drop" for="template"><span class="file-symbol" aria-hidden="true">▤</span><span class="upload-title">目标模板</span><span class="upload-desc">规定成品字段、表格和版式</span><span class="file-info" id="template-info">点击选择，或拖拽文件到这里</span><span class="formats">DOCX / XLSX<br>最多20 MiB · 留在本地，不提交DataProxy</span><input id="template" name="template" type="file" accept=".docx,.xlsx" required></label>
+</div>
+<label class="field-label" for="instruction">转换要求 <span>告诉模型需要填写什么</span></label>
+<textarea id="instruction" name="instruction" rows="4" maxlength="8000" required>依据源文档填写目标模板，保留模板布局和已有有效内容。缺少明确依据的信息留空，不虚构人员、日期或结论，并在审计报告中说明原因。</textarea>
+<details class="advanced"><summary><span>高级设置</span><span class="subtle">模型、输出预算与接入方式</span></summary><div class="settings-grid">
+<label>LLM模型<input id="model" name="model" maxlength="256" placeholder="使用后端配置"></label>
+<label>输出token上限<input id="max-output-tokens" name="max_output_tokens" type="number" min="1" max="1000000" step="1" value="16000" required></label>
+<label>思考强度<input id="reasoning-effort" name="reasoning_effort" list="efforts" value="auto" maxlength="64"><datalist id="efforts"><option value="auto"><option value="omit"><option value="low"><option value="medium"><option value="high"><option value="max"></datalist></label>
+<label>接入方式<select id="mode" name="mode"><option value="zip">ZIP · 成果保存在本地</option><option value="workspace">工作区 · 同步成果与审计</option></select></label>
+</div><p class="settings-hint">auto按模型选择默认策略；omit不发送思考强度。具体参数需由所选模型支持。</p><label class="checkbox"><input id="allow-degraded" type="checkbox"><span>允许使用降级解析资料<span class="subtle">默认关闭；开启后保留所有解析警告，需要人工复核。</span></span></label></details>
+<div id="form-error" class="error-message" role="alert" hidden></div>
+<div class="submit-row"><span id="submit-note">模板原件不会被修改</span><button id="start" class="primary-button" type="submit" disabled><span>开始转换</span><span aria-hidden="true">↗</span></button></div>
+</form></section>
+<aside class="panel results-panel"><div class="panel-heading"><div><p class="eyebrow">02 / OUTPUT</p><h2>运行与结果</h2></div><span id="state-badge" class="state-badge">等待开始</span></div>
+<div id="empty-state" class="empty-state"><div class="empty-drawing" aria-hidden="true"><span>▤</span><b>✓</b></div><h3>你的转换结果会出现在这里</h3><p>完成后下载文档，查看审计报告，<br>优先核对低确信度和未填写项。</p><div class="output-types"><span>转换成品</span><span>字段审计</span><span>运行记录</span></div></div>
+<div id="job-state" hidden><p id="task-files" class="task-files"></p><ol class="steps" aria-label="转换进度"><li data-step="0"><b>1</b><span>解析与读取资料</span></li><li data-step="1"><b>2</b><span>填写模板与预览</span></li><li data-step="2"><b>3</b><span>生成字段审计</span></li><li data-step="3"><b>4</b><span>交付与校验</span></li></ol><p id="job-message" class="job-message" role="status" aria-live="polite"></p><p id="job-time" class="subtle"></p>
+<div id="quality-warning" class="quality-warning" hidden></div>
+<div id="audit-summary" hidden><div class="audit-heading">字段审计 <span id="audit-state" class="subtle"></span></div><div class="counts"><div><strong id="high-count">0</strong><span>高确信度</span></div><div><strong id="low-count">0</strong><span>低确信度</span></div><div><strong id="empty-count">0</strong><span>未填写</span></div></div><p class="subtle">确信度是模型判断，不等于人工认证。</p></div>
+<div id="result-actions" class="result-actions"></div><details class="run-log"><summary>运行记录与任务标识</summary><pre id="task-ids"></pre><ol id="events"></ol></details></div>
+<details class="history"><summary>最近的本地任务 <span id="history-count">0</span></summary><div id="history-list"></div></details>
+</aside></div>
+<section id="audit-panel" class="panel audit-panel" hidden><div class="panel-heading"><div><p class="eyebrow">03 / REVIEW</p><h2>字段审计报告</h2></div><button id="close-audit" class="text-button" type="button">收起报告 ↑</button></div><iframe id="audit-frame" title="转换字段审计报告" sandbox="allow-scripts allow-downloads"></iframe></section>
+<footer><span>DocTransAI · 本地开发与验收工具</span><span>只有源文档进入DataProxy，目标模板由本地后端读取与填写。</span></footer>
+</main></body></html>

@@ -15,7 +15,10 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
                instruction: str, config: RuntimeConfig, source: Path | None = None,
                job_id: str | None = None, mode='zip', request_id=None, run_id=None,
                allow_degraded=False, timeout=1800, transport=None, progress=None,
-               workspace_id=None):
+               workspace_id=None, event_callback=None):
+    def event(phase, message):
+        if event_callback:
+            event_callback({'phase': phase, 'message': message})
     if mode not in {'zip', 'workspace'}:
         raise ValueError('Mode must be zip or workspace')
     if bool(source) == bool(job_id):
@@ -38,14 +41,18 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
     try:
         with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport) as dp:
             if source is not None:
+                event('parsing', '正在上传源文档并请求解析；目标模板保留在本地。')
                 job = dp.upload(source, request_id=receipt['request_id'])
                 job_id = job['job_id']
                 save(job_id=job_id, status='parsing')
             def record(job):
+                event('parsing', 'DataProxy：' + str(job.get('stage') or job.get('status')))
                 save(job_status=job.get('status'), stage=job.get('stage'),
                      parse_quality=job.get('parse_quality'), warnings=job.get('warnings'),
+                     failure_reason=job.get('failure_reason'),
                      knowledge_base_id=job.get('knowledge_base_id'), document_ids=job.get('document_ids'))
             dp.wait(job_id, allow_degraded=allow_degraded, progress=record)
+            event('reading', '正在读取并校验解析资料。')
             if mode == 'zip':
                 manifest = dp.artifact(job_id, output_dir / 'input')
             else:
@@ -63,23 +70,27 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
                 raise ValueError('Artifact quality rejected')
             save(status='input_validated', manifest=str(manifest))
         # Conversion has its own model budget. DataProxy polling budget never includes LLM time.
+        event('converting', '正在依据源材料填写模板并渲染检查。')
         result = convert(TaskSpec(manifest, template, output_dir / 'conversion', instruction),
                          config=config, progress=progress)
         save(conversion=asdict(result), status='converted' if result.execution_status == 'completed' else 'conversion_failed')
         if result.execution_status != 'completed':
             return receipt
         from doctransai.audit import audit_document
+        event('auditing', '正在生成字段审计，核对填写依据与未填写原因。')
         audit = audit_document(output_dir / 'conversion', config=config)
         save(audit_status=audit['status'])
         if audit['status'] != 'assessed':
             save(status='audit_failed')
             return receipt
         if mode == 'workspace':
+            event('publishing', '正在回写工作区并校验导出文件。')
             publish_workspace(base_url=base_url, api_key=api_key, receipt_path=receipt_path,
                               timeout=timeout, transport=transport)
             receipt = json.loads(receipt_path.read_text())
         else:
             save(status='completed')
+        event('completed', '转换与字段审计已完成。')
         return receipt
     except Exception as exc:
         # Preserve local output and stable IDs for recovery, without copying provider messages.

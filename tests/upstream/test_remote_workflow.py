@@ -161,7 +161,10 @@ def test_remote_requires_semantic_audit_after_conversion(tmp_path, monkeypatch, 
     monkeypatch.setattr(workflow.DataProxyClient,'artifact',artifact)
     monkeypatch.setattr(workflow,'convert',lambda *a,**k:ConversionResult('completed','not_run','result.docx','review.json'))
     monkeypatch.setattr(doctransai.audit,'audit_document',lambda *a,**k:{'status':audit_status})
-    result=workflow.run_remote(base_url='https://example.test',api_key='secret',template=template,job_id='job',
+    events=[]
+    result=workflow.run_remote(base_url='https://example.test',api_key='secret',template=template,job_id='job',event_callback=events.append,
         output_dir=tmp_path/'run',instruction='fill',config=RuntimeConfig(),
         transport=httpx.MockTransport(lambda r:httpx.Response(200,json={'status':'succeeded','parse_quality':'complete'})))
     assert result['status']==expected
+    assert [e['phase'] for e in events][:4]==['parsing','reading','converting','auditing']
+    assert (events[-1]['phase']=='completed')==(expected=='completed')
