@@ -84,7 +84,7 @@ doctransai remote --publish-receipt /work/runs/workspace-001/integration.json
 
 ## 质量、预算与恢复
 
-默认只接受 `complete`；若业务允许，显式 `--allow-degraded` 接受降级解析。警告保存于 `integration.json`、原manifest和转换报告；`failed` 无法放行。接受degraded不代表图片或来源缺失已被修复。
+默认接受 `complete` 和 `degraded`，降级只作为运行诊断提示，不阻止转换，也不自动降低填写字段的确信度。上游警告保留于 `integration.json`、原manifest和诊断报告；`failed` 或交付包完整性校验失败仍停止。
 
 `--timeout-seconds` 默认1800秒，是一次DataProxy阶段的客户端预算；`--conversion-timeout` 默认900秒，独立限制模型转换。客户端超时不取消服务端任务。单次HTTP I/O最多120秒，读取/下载时继续检查总预算。下载或只读快照最多1 GiB/20000文件；服务端可有更低的工作区限额（默认单文件64 MiB、工作区512 MiB），以实际部署为准。
 
@@ -114,4 +114,4 @@ doctransai remote --publish-receipt /work/runs/workspace-001/integration.json
 
 上传发生网络超时/断开后，客户端保持原 `Idempotency-Key`，调用 `GET /api/v1/parse-jobs/by-idempotency-key` 找回任务。暂时404或短暂网络错误会进行有限次只读查询；找到编号立即保存回执，进入正常轮询。查询未找到时报告“上传结果尚未确认”，保留原键，不自动生成新键或重新上传。后续人工重试须使用同一文件与原键，或用已找回job_id继续。
 
-找回任务不绕过解析质量检查：degraded仍需显式允许，默认停止转换，界面给出中文说明。审计和工作区发布使用同一后端HTTP允许配置。
+找回任务后，complete/degraded均继续处理；failed及无效交付包仍停止。审计和工作区发布使用同一后端HTTP允许配置。

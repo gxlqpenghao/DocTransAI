@@ -116,7 +116,7 @@ class DataProxyClient:
     def workspace_path(workspace_id):
         return '/api/v1/workspaces/' + quote(workspace_id, safe='')
 
-    def wait(self, job_id, *, allow_degraded=False, poll_seconds=2, progress=None):
+    def wait(self, job_id, *, allow_degraded=True, poll_seconds=2, progress=None):
         if not math.isfinite(poll_seconds) or poll_seconds < 0:
             raise ValueError('Invalid polling interval')
         while True:

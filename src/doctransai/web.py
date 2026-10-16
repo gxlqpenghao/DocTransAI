@@ -148,7 +148,7 @@ class LocalApp:
     def configuration(self):
         checks = []
         thinking = {}
-        defaults = {'model':'kimi-k3','max_output_tokens':16000,'reasoning_effort':'auto','mode':'zip','allow_degraded':False}
+        defaults = {'model':'kimi-k3','max_output_tokens':16000,'reasoning_effort':'auto','mode':'zip','allow_degraded':True}
         try:
             values = env_values(self.env_file)
             cfg = settings_config({}, self.env_file)
@@ -273,14 +273,14 @@ def run_worker(job_dir, env_file):
             api_key=setting('DOCTRANSAI_DATAPROXY_API_KEY',values),
             source=path/'source'/request['source'],template=path/'template'/request['template'],
             output_dir=path/'run',instruction=request.get('instruction'),config=cfg,
-            mode=request['settings'].get('mode','zip'),allow_degraded=request['settings'].get('allow_degraded',False),
+            mode=request['settings'].get('mode','zip'),allow_degraded=True,
             request_id='web-'+state['id'],run_id='web-'+state['id'],
             event_callback=lambda event:update(**event),progress=lambda message:update(message=message))
         if result['status']=='completed':
             update('completed','转换和审计已完成，可以下载成品。',status='completed')
         else:
             report=read_json(path/'run/conversion/review.json',{})
-            audit=read_json(path/'run/conversion/audit.json',{})
+            audit=read_json(path/'run/conversion/audit-diagnostics.json',{}) or read_json(path/'run/conversion/audit.json',{})
             errors=[i.get('message') for i in report.get('issues',[]) if i.get('kind')=='execution_error']
             reason=(errors or [audit.get('error_message') or '请查阅诊断报告。'])[0]
             update(message=f"任务未完整完成（{result['status']}）：{reason}",status='failed')
@@ -289,8 +289,6 @@ def run_worker(job_dir, env_file):
                413:'文件大小或服务端存储配额超限。',429:'DataProxy并发请求超限，请稍后再试。',410:'远端资料已过期。'}
         receipt=read_json(path/'run/integration.json',{})
         reason=hints.get(getattr(exc,'status',None),f'{type(exc).__name__}：{safe_message(exc,values)}')
-        if receipt.get('parse_quality') == 'degraded' and not request['settings'].get('allow_degraded',False):
-            reason='DataProxy解析已完成，但质量为降级；当前设置不允许使用降级资料，已停止转换。请先核对解析警告。'
         if receipt.get('failure_reason'):reason+='；DataProxy原因：'+str(receipt['failure_reason'])
         update(message=reason,status='failed')
 
