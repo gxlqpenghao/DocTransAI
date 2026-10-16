@@ -73,3 +73,20 @@ def test_html_escapes_document_content(tmp_path):
     save_audit(tmp_path,a)
     html=(tmp_path/'audit.html').read_text()
     assert '<script>bad</script>' not in html and '&lt;script&gt;' in html
+
+
+def test_delivery_contains_only_three_field_categories_and_no_upstream_diagnostics(tmp_path):
+    label=field('label');label['category']='not_field'
+    a={'schema_version':'doctransai.audit.v1','fields':[field(),label],
+       'operations':[], 'status':'assessed','document_sha256':'hash',
+       'parse_quality':{'status':'degraded','warnings':['visual_quality_issue']},
+       'source_context':{'parse_quality':'degraded'},'conversion_issues':['upstream warning'],
+       'activity_log':[{'private_diagnostic':'diagnostic text'}],
+       'model_assessments':{'assessments':[{'category':'not_field'}]}}
+    save_audit(tmp_path,a)
+    data=json.loads((tmp_path/'audit.json').read_text())
+    assert set(data['counts'])=={'filled_high','filled_low','unfilled'}
+    assert [f['field_id'] for f in data['fields']]==['n1']
+    for text in ((tmp_path/'audit.json').read_text(),(tmp_path/'audit.html').read_text()):
+        assert 'visual_quality_issue' not in text and 'degraded' not in text and 'not_field' not in text
+    assert json.loads((tmp_path/'audit-diagnostics.json').read_text())['parse_quality']['status']=='degraded'

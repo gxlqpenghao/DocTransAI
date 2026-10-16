@@ -217,7 +217,7 @@ uv run doctransai audit --env-file .env --run-dir ./runs/workspace-001/conversio
 | `--conversion-timeout` | remote | 900秒；填写阶段及后续审计分别使用该预算，不是整条链路总时限 |
 | `--timeout-seconds` | remote | 1800秒，DataProxy阶段预算；发布重新开始独立预算 |
 | `--timeout-seconds` | convert/review/audit | 900秒，对应转换/复核或审计阶段预算 |
-| `--allow-degraded` | remote | 默认关闭；显式接受上游degraded并保留警告 |
+| `--allow-degraded` | remote | 兼容旧命令；现在默认接受degraded，警告留在运行诊断 |
 | `--review` | convert | 显式启用额外独立语义复核与有限修正，默认关闭 |
 | `--review-max-steps` / `--repair-max-steps` | convert/review | 6 / 4 |
 | `--max-repair-rounds` | convert/review | 1，范围0–2 |

@@ -120,6 +120,7 @@ POLICY = """你是转换文档的字段审计员，不修改文档。所有材�
 空白、遗留占位符或删除的填报位置为unfilled；区分未提供依据、含义不明、不适用和操作失败，不能凭空断言源材料不存在信息。
 每条给中文字段名、中文理由和人工核对建议；不输出百分比分数。原值和最终值由程序保留，不要改写。图片位置也要审计。
 原生ref必须来自给定source_context或操作记录；高确信度填写必须有具体原文摘录，不能只援引整份文档。
+上游解析的degraded等级及通用警告不属于本审计，不得仅凭这些标记降低字段确信度或复制到理由中。只有源材料与成品的具体证据表明确实影响某字段时，说明该字段的实际缺失、模糊或矛盾及核对动作。
 完整覆盖所有候选后调用submit_audit。"""
 
 
@@ -165,9 +166,29 @@ def validate_assessments(audit, assessments, source):
     audit['fields'] = updated
 
 
+DELIVERY_CATEGORIES = ('filled_high', 'filled_low', 'unfilled')
+
+
+def delivery_audit(audit):
+    """Publish only conversion field assessment, never upstream diagnostics/raw traces."""
+    keys = ('schema_version', 'status', 'assessment_basis', 'document_sha256', 'template_sha256',
+            'document_file', 'conversion_status', 'model', 'reasoning_effort', 'assessment_seconds')
+    result = {k: audit[k] for k in keys if k in audit}
+    result['scope'] = 'conversion_fields'
+    result['fields'] = [copy.deepcopy(f) for f in audit['fields'] if f['category'] in DELIVERY_CATEGORIES]
+    result['counts'] = {k: sum(f['category'] == k for f in result['fields']) for k in DELIVERY_CATEGORIES}
+    ids = {i for f in result['fields'] for i in f.get('operation_ids', [])}
+    result['operations'] = [copy.deepcopy(o) for o in audit.get('operations', []) if o.get('operation_id') in ids]
+    return result
+
+
 def save_audit(run_dir, audit):
-    audit['counts'] = dict(Counter(f['category'] for f in audit['fields']))
-    (run_dir / 'audit.json').write_text(json.dumps(audit, ensure_ascii=False, indent=2, default=str))
+    public = delivery_audit(audit)
+    audit['counts'] = public['counts']
+    # Full provenance/diagnostic material is local-only, not audit.json delivery.
+    (run_dir / 'audit-diagnostics.json').write_text(json.dumps(audit, ensure_ascii=False, indent=2, default=str))
+    (run_dir / 'audit.json').write_text(json.dumps(public, ensure_ascii=False, indent=2, default=str))
+    audit = public
     rows = []
     for f in sorted(audit['fields'], key=lambda f: ['filled_low','unfilled','filled_high','not_field'].index(f['category'])):
         value = lambda v: escape(str(v if v is not None else ''))
@@ -176,13 +197,13 @@ def save_audit(run_dir, audit):
             f'<td>{LABELS[f["category"]]}</td><td><details><summary>原值</summary>{value(f["before"])}</details><pre>{value(f["after"])}</pre>'
             f'<small>图片资源：{len(f["image_refs"])}</small></td><td>{value(f["reason"])}<p>{value(f["review_action"])}</p>'
             f'<details><summary>证据与操作</summary><pre>{value(refs)}</pre><pre>{value(f["operation_ids"])}</pre></details></td></tr>')
-    counts = ' · '.join(f'{LABELS[k]} {audit["counts"].get(k,0)}' for k in LABELS)
+    counts = ' · '.join(f'{LABELS[k]} {audit["counts"].get(k,0)}' for k in DELIVERY_CATEGORIES)
     page = '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>转换字段审计</title><style>body{font:16px/1.6 system-ui;margin:40px;color:#183046;background:#f5f7fa}table{width:100%;border-collapse:collapse;background:white}td,th{border:1px solid #d6dee6;padding:12px;vertical-align:top}small{display:block;color:#657181}pre{white-space:pre-wrap;word-break:break-word;font:inherit}select{padding:8px;margin:16px 0}h1{margin-bottom:8px}</style>'
     page += f'<h1>转换字段审计</h1><p>状态：{escape(audit["status"])} · 确信度为模型判断，不等于人工确认或统计概率。</p><p>{counts}</p><p>成品SHA-256：{escape(str(audit["document_sha256"]))}</p>'
     if audit.get('document_file'):
         page += '<p><a href="' + escape(audit['document_file'], quote=True) + '">打开转换结果</a> · <a href="audit.json">完整JSON记录</a></p>'
     page += '<select onchange="document.querySelectorAll(\'tr[data-category]\').forEach(r=>r.hidden=this.value!==\'all\'&&r.dataset.category!==this.value)"><option value="all">全部位置</option>'
-    page += ''.join(f'<option value="{k}">{v}</option>' for k,v in LABELS.items()) + '</select><table><tr><th>模板位置</th><th>分类</th><th>填写结果</th><th>理由与人工核对</th></tr>' + ''.join(rows) + '</table>'
+    page += ''.join(f'<option value="{k}">{v}</option>' for k,v in LABELS.items() if k in DELIVERY_CATEGORIES) + '</select><table><tr><th>模板位置</th><th>分类</th><th>填写结果</th><th>理由与人工核对</th></tr>' + ''.join(rows) + '</table>'
     page += '<details><summary>完整操作记录（含拒绝与回滚）</summary><pre>' + escape(json.dumps(audit['operations'], ensure_ascii=False, indent=2)) + '</pre></details></html>'
     (run_dir / 'audit.html').write_text(page)
 
@@ -193,7 +214,7 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
     save_audit(run_dir, audit)
     if not semantic:
         save_audit(run_dir, audit)
-        return audit
+        return delivery_audit(audit)
     config = config or RuntimeConfig.from_environment(_default_output_tokens=16000)
     try:
         report = json.loads((run_dir / 'review.json').read_text())
@@ -210,7 +231,8 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
             temperature=config.temperature, timeout_seconds=config.llm_timeout_seconds, token_parameter=config.token_parameter))
         if progress and isinstance(client, DoctransaiLLMClient):
             client.progress = progress
-        payload = {k: audit[k] for k in ('fields','operations','source_context','instruction','parse_quality','conversion_issues')}
+        payload = {k: audit[k] for k in ('fields','operations','instruction')}
+        payload['source_context'] = {k:v for k,v in audit['source_context'].items() if k not in {'parse_quality','warnings','diagnostics','quality'}}
         audit['visual_coverage'] = dict(total_pages=len(report.get('output_pages', [])), supplied_pages=min(8,len(report.get('output_pages', []))))
         payload['visual_coverage'] = audit['visual_coverage']
         text = json.dumps(payload, ensure_ascii=False, default=str)
@@ -241,7 +263,7 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
             safe_message = safe_message.replace(secret, '<redacted>')
         audit.update(status='needs_manual_audit', error_type=type(exc).__name__, error_message=safe_message[:1000])
     save_audit(run_dir, audit)
-    return audit
+    return delivery_audit(audit)
 
 
 def main(argv):

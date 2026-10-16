@@ -18,7 +18,7 @@ def main(argv):
     p.add_argument('--request-id')
     p.add_argument('--run-id')
     p.add_argument('--workspace-id', help='Reuse a known snapshot even after its original parse ZIP expires')
-    p.add_argument('--allow-degraded', action='store_true')
+    p.add_argument('--allow-degraded', action='store_true', default=True, help='Compatibility option: degraded results are accepted by default; warnings remain in diagnostics')
     p.add_argument('--template', type=Path)
     p.add_argument('--output-dir', type=Path)
     p.add_argument('--instruction')

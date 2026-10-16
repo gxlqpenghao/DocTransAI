@@ -101,7 +101,7 @@ def test_manifest_cannot_bypass_quality_policy(tmp_path, monkeypatch):
     def artifact(self, job_id, destination):
         destination.mkdir(parents=True)
         manifest = destination / 'manifest.json'
-        manifest.write_text(json.dumps({'quality': {'status': 'degraded'}}))
+        manifest.write_text(json.dumps({'quality': {'status': 'failed'}}))
         return manifest
     monkeypatch.setattr(workflow.DataProxyClient, 'artifact', artifact)
     monkeypatch.setattr(workflow, 'convert', lambda *a, **k: pytest.fail('must not invoke model'))
@@ -170,3 +170,26 @@ def test_remote_requires_semantic_audit_after_conversion(tmp_path, monkeypatch, 
     assert result['status']==expected
     assert [e['phase'] for e in events][:4]==['parsing','reading','converting','auditing']
     assert (events[-1]['phase']=='completed')==(expected=='completed')
+
+
+@pytest.mark.parametrize('mode',['zip','workspace'])
+def test_degraded_default_continues_conversion_and_preserves_diagnostics(tmp_path,monkeypatch,mode):
+    from doctransai.upstream.dataproxy import workflow
+    from doctransai.config import RuntimeConfig
+    from doctransai.types import ConversionResult
+    template=tmp_path/'template.docx';template.write_bytes(b'template');called=[]
+    def artifact(self, job, destination, **kwargs):
+        destination.mkdir(parents=True)
+        p=destination/'manifest.json';p.write_text(json.dumps({'quality':{'status':'degraded'}}));return p
+    monkeypatch.setattr(workflow.DataProxyClient,'artifact',artifact)
+    monkeypatch.setattr(workflow.DataProxyClient,'materialize',artifact)
+    def convert(*a,**k):
+        called.append(True);return ConversionResult('failed','not_run',None,'review.json')
+    monkeypatch.setattr(workflow,'convert',convert)
+    def handle(r):
+        if '/workspaces/' in r.url.path:return httpx.Response(200,json={'parse_job_id':'job','workspace_id':'ws','run_id':'run'})
+        return httpx.Response(200,json={'status':'succeeded','parse_quality':'degraded','warnings':[{'code':'visual_quality_issue'}]})
+    result=workflow.run_remote(base_url='https://example.test',api_key='secret',template=template,job_id='job',
+        mode=mode,workspace_id='ws' if mode=='workspace' else None,output_dir=tmp_path/'run',config=RuntimeConfig(),transport=httpx.MockTransport(handle))
+    assert called==[True]
+    assert result['parse_quality']=='degraded' and result['warnings'][0]['code']=='visual_quality_issue'
