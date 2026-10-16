@@ -59,7 +59,7 @@ outputs/web/<本地任务ID>/
 
 开关同时检查模型ID与后端服务地址，不把省略参数当作关闭。百炼线路的 `qwen3.8-flash`、`kimi-k2.5`、`kimi-k2.6` 使用 `enable_thinking: true/false`；DeepSeek官方线路的 `deepseek-flash`（当前为V4.1 Flash）及官方兼容别名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 使用 `thinking.type: enabled/disabled`。其他网关需明确适配后才开放按钮。仅更改模型名不会更换后端地址或授权；需自行配置相应服务商的地址和密钥。
 
-Python/CLI可使用 `reasoning_effort='on'/'off'`（CLI为 `--reasoning-effort on/off`），在这些已适配组合上转换为对应请求字段，不会发送字面值on/off作为服务商的reasoning_effort。原有high等强度配置仍然支持。参数协议已通过模拟HTTP测试，本次未调用这些新模型做真实转换或质量对照。
+Python/CLI可使用 `reasoning_effort='on'/'off'`（CLI为 `--reasoning-effort on/off`），在这些已适配组合上转换为对应请求字段，不会发送字面值on/off作为服务商的reasoning_effort。原有high等强度配置仍然支持。参数协议已通过模拟HTTP测试，完整转换能力仍需单独验收；开发支线的单次审计对照不代表生产模型已切换。
 
 协议依据：[百炼Qwen3.8 Flash](https://help.aliyun.com/zh/model-studio/token-plan-playbook-code-review)、[Kimi](https://help.aliyun.com/zh/model-studio/kimi-api)、[DeepSeek思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)。
 
