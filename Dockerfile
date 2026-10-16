@@ -1,12 +1,11 @@
 FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-writer libreoffice-calc poppler-utils fonts-noto-cjk \
+    libreoffice-writer libreoffice-calc fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY contracts ./contracts
-RUN pip install --no-cache-dir . pdf2image==1.17.0
-ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app/src DOCTRANSAI_RENDER_PYTHON=python \
-    DOCTRANSAI_DOCX_RENDERER=/renderer/render_docx.py
-ENTRYPOINT ["doctransai"]
+RUN pip install --no-cache-dir uv==0.12.19 && uv sync --locked --no-dev --python /usr/local/bin/python
+ENV PYTHONUNBUFFERED=1
+ENTRYPOINT ["/app/.venv/bin/doctransai"]

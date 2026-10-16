@@ -29,6 +29,7 @@ class RuntimeConfig:
     token_parameter: str | None = None
     render_script: Path | None = None
     render_python: str = sys.executable
+    soffice: str | None = None
     pdftoppm: str = "pdftoppm"
     render_timeout: float = 120
     render_revision: str = "1"
@@ -36,6 +37,8 @@ class RuntimeConfig:
     model_diagnostics: bool = False
 
     def __post_init__(self):
+        if self.render_script is None:
+            object.__setattr__(self, "render_script", Path(__file__).with_name("render_document.py"))
         if not all(math.isfinite(x) for x in (self.max_seconds, self.max_steps, self.review_max_steps, self.repair_max_steps, self.render_timeout, self.max_output_tokens, self.initial_source_chars, self.initial_source_pages, self.initial_source_assets, self.initial_source_max_bytes, self.auto_preview_max_pages)):
             raise ValueError("Runtime budgets must be finite")
         if not 0 <= self.max_repair_rounds <= 2:
@@ -77,6 +80,7 @@ class RuntimeConfig:
                       token_parameter=get('DOCTRANSAI_LLM_TOKEN_PARAMETER', 'max_tokens'),
                       render_script=Path(renderer).expanduser() if renderer else None,
                       render_python=get('DOCTRANSAI_RENDER_PYTHON', sys.executable),
+                      soffice=get('DOCTRANSAI_SOFFICE'),
                       pdftoppm=get('DOCTRANSAI_PDFTOPPM', 'pdftoppm'),
                       render_revision=get('DOCTRANSAI_RENDER_REVISION', '1'),
                       model_diagnostics=get('DOCTRANSAI_MODEL_DIAGNOSTICS', '').lower() in ('1','true','on','yes'))
