@@ -94,7 +94,7 @@ def upload_parts(body, content_type):
     parts = {}
     for item in message.iter_parts():
         name = item.get_param('name', header='content-disposition')
-        if name not in {'source','template','instruction','settings'} or name in parts:
+        if name not in {'source','template','settings'} or name in parts:
             raise ValueError('上传表单包含重复或未知字段。')
         data = item.get_payload(decode=True)
         if not isinstance(data, bytes):
@@ -120,10 +120,10 @@ def upload_parts(body, content_type):
             parts[name] = (filename, data)
         else:
             if len(data) > 32000:
-                raise ValueError('转换要求或设置过长。')
+                raise ValueError('设置内容过长。')
             parts[name] = data.decode('utf-8')
-    if not {'source','template','instruction'} <= parts.keys() or not parts['instruction'].strip():
-        raise ValueError('请上传源文档、目标模板并填写转换要求。')
+    if not {'source','template'} <= parts.keys():
+        raise ValueError('请上传源文档和目标模板。')
     parts['settings'] = json.loads(parts.get('settings') or '{}')
     return parts
 
@@ -191,8 +191,7 @@ class LocalApp:
                 filename, data = parts[kind]
                 (job_dir/kind).mkdir()
                 (job_dir/kind/filename).write_bytes(data)
-            request = {'source':parts['source'][0], 'template':parts['template'][0],
-                       'instruction':parts['instruction'].strip(), 'settings':parts['settings']}
+            request = {'source':parts['source'][0], 'template':parts['template'][0], 'settings':parts['settings']}
             save_receipt(job_dir/'request.json', request)
             state = dict(id=job_id,status='queued',phase='queued',message='任务已创建，准备开始。',
                          source=request['source'],template=request['template'],mode=parts['settings'].get('mode','zip'),created_at=time.time(),events=[])
@@ -270,7 +269,7 @@ def run_worker(job_dir, env_file):
         result=run_remote(base_url=setting('DOCTRANSAI_DATAPROXY_BASE_URL',values),
             api_key=setting('DOCTRANSAI_DATAPROXY_API_KEY',values),
             source=path/'source'/request['source'],template=path/'template'/request['template'],
-            output_dir=path/'run',instruction=request['instruction'],config=cfg,
+            output_dir=path/'run',instruction=request.get('instruction'),config=cfg,
             mode=request['settings'].get('mode','zip'),allow_degraded=request['settings'].get('allow_degraded',False),
             request_id='web-'+state['id'],run_id='web-'+state['id'],
             event_callback=lambda event:update(**event),progress=lambda message:update(message=message))

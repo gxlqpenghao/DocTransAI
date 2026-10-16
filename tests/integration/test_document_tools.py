@@ -239,6 +239,23 @@ def test_conversion_uses_new_tools_and_publishes_only_after_finish(tmp_path, mon
     assert not (task.output_dir / "working.docx").exists()
 
 
+def test_button_conversion_uses_system_policy_without_repeated_user_rules(tmp_path, monkeypatch):
+    corpus,template,image=material(tmp_path)
+    monkeypatch.setattr('doctransai.conversion.read_parsed_document_bundle',lambda _:corpus)
+    class NoInstructionClient(FakeClient):
+        def chat(self,messages,tools,**kwargs):
+            if self.index==0:
+                original=Path(__file__).resolve().parents[2]/'src/doctransai/prompts/document_editing_policy.md'
+                assert messages[0]['content']==original.read_text()
+                payload=json.loads(messages[1]['content'][0]['text'])
+                assert 'instruction' not in payload
+            return super().chat(messages,tools,**kwargs)
+    task=TaskSpec(corpus.bundle_path,template,tmp_path/'button-run')
+    result=convert(task,config=RuntimeConfig(),client=NoInstructionClient(),previewer=FakePreview(image))
+    assert result.execution_status=='completed',result.issues
+    assert 'instruction' not in json.loads((task.output_dir/'input.json').read_text())
+
+
 def test_successful_edit_is_automatically_previewed_before_finish(tmp_path, monkeypatch):
     corpus, template, image = material(tmp_path)
     monkeypatch.setattr("doctransai.conversion.read_parsed_document_bundle", lambda _: corpus)

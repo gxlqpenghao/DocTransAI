@@ -8,7 +8,7 @@ class TaskSpec:
     bundle_path: Path
     template_path: Path
     output_dir: Path
-    instruction: str
+    instruction: str | None = None
     source_file: Path | None = None
     document_id: str | None = None
     source_refs: tuple[str, ...] = ()

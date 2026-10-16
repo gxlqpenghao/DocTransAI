@@ -38,7 +38,7 @@ def _checkpoint_after_preview(runtime, review_input, system_message, trace_path,
     delivered = min(page_count, config.auto_preview_max_pages)
     runtime.coverage = set(range(1, delivered + 1))
     all_pages_delivered = delivered == page_count
-    context = dict(phase="result_check", instruction=review_input["instruction"],
+    context = dict(phase="result_check", instruction=review_input.get("instruction"),
                    primary_source_refs=review_input["primary_source_refs"], source=review_input["source"],
                    original_template=review_input["document"], current_document=runtime.editor.inspect(),
                    preview_receipt=dict(tool="program_auto_preview" if auto else "preview_document",

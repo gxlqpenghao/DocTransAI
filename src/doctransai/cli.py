@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         convert_parser.add_argument("--bundle", type=Path, required=True)
         convert_parser.add_argument("--template", type=Path, required=True)
         convert_parser.add_argument("--output-dir", type=Path, required=True, help="New run directory")
-        convert_parser.add_argument("--instruction", required=True)
+        convert_parser.add_argument("--instruction", help="Optional task-specific instruction; otherwise use the backend editing policy")
         convert_parser.add_argument("--source-file", type=Path)
         convert_parser.add_argument("--document-id")
         convert_parser.add_argument("--source-ref", action="append", default=[])
