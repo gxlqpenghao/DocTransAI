@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import time
 from urllib.parse import quote, urlsplit
@@ -11,6 +12,20 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from doctransai.data_layer.artifact import package_path, read_artifact, unpack_artifact
+
+
+def validate_origin(base_url, allowed_http_origin=None):
+    url = urlsplit(base_url)
+    if not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in {'', '/'}:
+        raise ValueError('DataProxy base URL must be an origin without /api')
+    allowed = allowed_http_origin or os.environ.get('DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN', '')
+    local = url.hostname in {'localhost', '127.0.0.1', '::1'}
+    if url.scheme != 'https' and not (url.scheme == 'http' and (local or base_url.rstrip('/') == allowed.rstrip('/'))):
+        raise ValueError('DataProxy requires HTTPS; explicitly allow the exact HTTP origin in backend configuration')
+
+
+class UploadOutcomeUnknown(TimeoutError):
+    pass
 
 
 class DataProxyError(ValueError):
@@ -26,12 +41,8 @@ def save_receipt(path: Path, value: dict):
 
 
 class DataProxyClient:
-    def __init__(self, base_url, api_key, *, timeout=1800, transport=None):
-        url = urlsplit(base_url)
-        if url.scheme != 'https' and not (url.scheme == 'http' and url.hostname in {'localhost', '127.0.0.1', '::1'}):
-            raise ValueError('DataProxy requires HTTPS except for loopback development')
-        if not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in {'', '/'}:
-            raise ValueError('DataProxy base URL must be an origin without /api')
+    def __init__(self, base_url, api_key, *, timeout=1800, transport=None, allowed_http_origin=None):
+        validate_origin(base_url, allowed_http_origin)
         if not api_key or not math.isfinite(timeout) or timeout <= 0:
             raise ValueError('API key and positive finite timeout required')
         self.deadline = time.monotonic() + timeout
@@ -60,13 +71,42 @@ class DataProxyClient:
     def request(self, method, path, **kwargs):
         return self.check(self.http.request(method, path, timeout=self.budget(), **kwargs))
 
-    def upload(self, source: Path, *, request_id: str):
+    def find_by_request_id(self, request_id):
         if not request_id or len(request_id) > 255:
             raise ValueError('A stable upload request ID is required')
-        with source.open('rb') as stream:
-            return self.request('POST', '/api/v1/parse-jobs',
-                                headers={'Idempotency-Key': request_id},
-                                files={'file': (source.name, stream)}).json()
+        response = self.http.get('/api/v1/parse-jobs/by-idempotency-key',
+            headers={'Idempotency-Key':request_id}, timeout=min(10, self.budget()))
+        if response.status_code == 404:
+            return None
+        job = self.check(response).json()
+        if not isinstance(job.get('job_id'), str) or not job['job_id']:
+            raise ValueError('DataProxy response has no job_id')
+        return job
+
+    def upload(self, source: Path, *, request_id: str, progress=None, recovery_attempts=6, recovery_interval=2):
+        if not request_id or len(request_id) > 255:
+            raise ValueError('A stable upload request ID is required')
+        try:
+            with source.open('rb') as stream:
+                job = self.request('POST', '/api/v1/parse-jobs',
+                    headers={'Idempotency-Key': request_id}, files={'file': (source.name, stream)}).json()
+            if not isinstance(job.get('job_id'), str) or not job['job_id']:
+                raise ValueError('DataProxy response has no job_id')
+            return job
+        except httpx.TransportError as exc:
+            if progress:
+                progress('上传响应中断，正在用原请求编号找回任务；不会重复上传。')
+            for attempt in range(recovery_attempts):
+                try:
+                    job = self.find_by_request_id(request_id)
+                    if job:
+                        if progress:progress('已找回原解析任务，继续查询进度。')
+                        return job
+                except httpx.TransportError:
+                    pass
+                if attempt + 1 < recovery_attempts:
+                    time.sleep(min(recovery_interval, self.budget()))
+            raise UploadOutcomeUnknown('上传结果尚未确认；已保留原请求编号，请稍后按原幂等键找回任务，不要创建新请求重复上传。') from exc
 
     @staticmethod
     def job_path(job_id):

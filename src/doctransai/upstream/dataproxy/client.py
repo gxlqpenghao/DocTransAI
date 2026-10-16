@@ -9,16 +9,13 @@ import uuid
 import httpx
 
 from doctransai.data_layer.artifact import unpack_artifact
+from .service import validate_origin, DataProxyClient
 
 
 def fetch_parse_artifact(source: Path, output_dir: Path, *, base_url: str, api_key: str,
                          idempotency_key: str | None = None, timeout: float = 900,
-                         transport=None, poll_interval: float = 2):
-    url = urlsplit(base_url)
-    if url.scheme != 'https' and not (url.scheme == 'http' and url.hostname in {'localhost', '127.0.0.1', '::1'}):
-        raise ValueError('DataProxy requires HTTPS except for local development')
-    if url.username or url.password or url.query or url.fragment or not url.hostname:
-        raise ValueError('Invalid DataProxy base URL')
+                         transport=None, poll_interval: float = 2, allowed_http_origin=None):
+    validate_origin(base_url, allowed_http_origin)
     if not api_key or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('API key and positive finite timeout are required')
     if output_dir.exists():
@@ -43,9 +40,9 @@ def fetch_parse_artifact(source: Path, output_dir: Path, *, base_url: str, api_k
             if response.status_code >= 300:
                 raise ValueError(f'DataProxy HTTP {response.status_code}; see parse-request.json for task identity')
             return response
-        with source.open('rb') as file:
-            result = checked(client.post('api/v1/parse-jobs', headers={'Idempotency-Key': key},
-                             files={'file': (source.name, file)}, timeout=budget())).json()
+        with DataProxyClient(base_url, api_key, timeout=max(0.001, deadline-time.monotonic()),
+                             transport=transport, allowed_http_origin=allowed_http_origin) as dp:
+            result = dp.upload(source, request_id=key)
         job = result.get('job_id')
         if not isinstance(job, str) or not job:
             raise ValueError('DataProxy response has no job_id')

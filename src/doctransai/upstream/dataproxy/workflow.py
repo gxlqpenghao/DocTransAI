@@ -6,6 +6,7 @@ from pathlib import Path
 import uuid
 
 from doctransai.config import RuntimeConfig
+from doctransai.settings import env_values, setting
 from doctransai.conversion import convert
 from doctransai.types import TaskSpec
 from .service import DataProxyClient, save_receipt
@@ -15,7 +16,8 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
                instruction: str | None = None, config: RuntimeConfig, source: Path | None = None,
                job_id: str | None = None, mode='zip', request_id=None, run_id=None,
                allow_degraded=False, timeout=1800, transport=None, progress=None,
-               workspace_id=None, event_callback=None):
+               workspace_id=None, event_callback=None, allowed_http_origin=None):
+    allowed_http_origin = allowed_http_origin or setting('DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN', env_values(config.env_file))
     def event(phase, message):
         if event_callback:
             event_callback({'phase': phase, 'message': message})
@@ -39,10 +41,10 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
         save_receipt(receipt_path, receipt)
     save()
     try:
-        with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport) as dp:
+        with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport, allowed_http_origin=allowed_http_origin) as dp:
             if source is not None:
                 event('parsing', '正在上传源文档并请求解析；目标模板保留在本地。')
-                job = dp.upload(source, request_id=receipt['request_id'])
+                job = dp.upload(source, request_id=receipt['request_id'], progress=lambda message:event('parsing', message))
                 job_id = job['job_id']
                 save(job_id=job_id, status='parsing')
             def record(job):
@@ -86,7 +88,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
         if mode == 'workspace':
             event('publishing', '正在回写工作区并校验导出文件。')
             publish_workspace(base_url=base_url, api_key=api_key, receipt_path=receipt_path,
-                              timeout=timeout, transport=transport)
+                              timeout=timeout, transport=transport, allowed_http_origin=allowed_http_origin)
             receipt = json.loads(receipt_path.read_text())
         else:
             save(status='completed')
@@ -99,7 +101,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
         raise
 
 
-def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, transport=None, replace_audit=False):
+def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, transport=None, replace_audit=False, allowed_http_origin=None):
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('mode') != 'workspace' or receipt.get('conversion', {}).get('execution_status') != 'completed':
         raise ValueError('Only a completed workspace conversion may be published')
@@ -117,7 +119,7 @@ def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, tr
     save_receipt(receipt_path, receipt)
     wsid = receipt['workspace_id']
     published = []
-    with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport) as dp:
+    with DataProxyClient(base_url, api_key, timeout=timeout, transport=transport, allowed_http_origin=allowed_http_origin) as dp:
         entries = {e['path']: e for e in dp.entries(wsid)}
         for file in files:
             target = 'outputs/' + file.name

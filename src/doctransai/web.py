@@ -289,6 +289,8 @@ def run_worker(job_dir, env_file):
                413:'文件大小或服务端存储配额超限。',429:'DataProxy并发请求超限，请稍后再试。',410:'远端资料已过期。'}
         receipt=read_json(path/'run/integration.json',{})
         reason=hints.get(getattr(exc,'status',None),f'{type(exc).__name__}：{safe_message(exc,values)}')
+        if receipt.get('parse_quality') == 'degraded' and not request['settings'].get('allow_degraded',False):
+            reason='DataProxy解析已完成，但质量为降级；当前设置不允许使用降级资料，已停止转换。请先核对解析警告。'
         if receipt.get('failure_reason'):reason+='；DataProxy原因：'+str(receipt['failure_reason'])
         update(message=reason,status='failed')
 
