@@ -23,13 +23,13 @@ uv run doctransai web --env-file /secure/backend.env --port 8765 --runs-dir ./ou
 
 1. 选择或拖入一份源文档：PDF、DOC/DOCX、PPT/PPTX、XLSX/XLSM、TXT/Markdown、HTML或常见图片，最大100 MiB。实际解析能力取决于DataProxy配置。
 2. 选择目标模板：DOCX或XLSX，最大20 MiB。旧DOC模板请先转为DOCX；PDF不能作为当前填写模板。扩展名和基本Office文件结构都会校验。
-3. 可在“高级设置”调整模型、输出token预算、思考强度、ZIP/工作区模式以及是否允许降级解析。切换模型时思考强度恢复auto，具体可用值取决于所选模型。
+3. 上传区下方直接调整模型、输出token预算、思考开关、ZIP/工作区模式及是否允许降级解析，无需打开弹窗。开启与关闭按钮均有悬停和键盘聚焦说明。K3使用后端强度（默认high），关闭置灰；未知模型或尚未适配的服务地址同样禁用开关。
 4. 点击“开始转换”，查看解析、资料读取、填写与预览、审计、交付等阶段。当前一次运行一个任务，不会因刷新页面自动重复提交。
 5. 下载成品，打开审计弹窗，筛选低确信度和未填写项。在“诊断详情”中也可下载审计JSON、诊断报告、任务记录；工作区方式另提供导出ZIP。
 
 页面不提供转换要求输入框，也不追加隐藏的默认指令。固定填写规则维护在 `src/doctransai/prompts/document_editing_policy.md`，审计规则维护在 `src/doctransai/audit.py`。CLI与Python接口仍支持可选的 `instruction` 供明确的单次业务要求；普通按钮集成直接省略即可。
 
-桌面主界面使用一屏双面板，只展示文件选择、当前状态、审计概览、成品下载和审计入口；高级设置、历史任务和诊断详情在弹窗打开。窄屏通过“上传材料 / 运行结果”切换面板。长审计报告和诊断记录在弹窗内滚动，不撑高主页。更换文件会清除当前展示的旧结果，历史文件仍可从“历史任务”打开。
+桌面主界面使用一屏双面板，只展示文件选择、当前状态、审计概览、成品下载和审计入口；设置直接显示在上传区下方；历史任务和诊断详情在弹窗打开。窄屏通过“上传材料 / 运行结果”切换面板。长审计报告和诊断记录在弹窗内滚动，不撑高主页。更换文件会清除当前展示的旧结果，历史文件仍可从“历史任务”打开。
 
 若填写已完成但审计或发布失败，页面会明确标记任务未完整完成；已经生成的文件仍可下载，并标注待复核，不伪装为完整成功。
 
@@ -54,3 +54,11 @@ outputs/web/<本地任务ID>/
 后端自动化测试覆盖上传校验、文件大小限制、同源请求验证、单任务并发限制、模板与源文件分开保存、下载文件白名单、审计页面隔离、失败信息脱敏和重启状态。转换核心继续使用已有回归测试。
 
 手工/浏览器验收应分别记录界面操作、真实DataProxy解析、模型转换、审计与成品视觉检查，不把模拟后端测试当作真实模型转换。真实验收使用的配置、上传文件、任务ID、日志、截图与成果放在忽略目录中，不提交至公开仓库。
+
+## 思考开关适配
+
+开关同时检查模型ID与后端服务地址，不把省略参数当作关闭。百炼线路的 `qwen3.8-flash`、`kimi-k2.5`、`kimi-k2.6` 使用 `enable_thinking: true/false`；DeepSeek官方线路的 `deepseek-flash`（当前为V4.1 Flash）及官方兼容别名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 使用 `thinking.type: enabled/disabled`。其他网关需明确适配后才开放按钮。仅更改模型名不会更换后端地址或授权；需自行配置相应服务商的地址和密钥。
+
+Python/CLI可使用 `reasoning_effort='on'/'off'`（CLI为 `--reasoning-effort on/off`），在这些已适配组合上转换为对应请求字段，不会发送字面值on/off作为服务商的reasoning_effort。原有high等强度配置仍然支持。参数协议已通过模拟HTTP测试，本次未调用这些新模型做真实转换或质量对照。
+
+协议依据：[百炼Qwen3.8 Flash](https://help.aliyun.com/zh/model-studio/token-plan-playbook-code-review)、[Kimi](https://help.aliyun.com/zh/model-studio/kimi-api)、[DeepSeek思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)。

@@ -82,3 +82,29 @@ def test_remote_reads_backend_file_and_cli_overrides(tmp_path, monkeypatch):
     assert captured['config'].model=='selected-model'
     assert captured['config'].max_output_tokens==22000
     assert captured['config'].reasoning_effort=='omit'
+
+@pytest.mark.parametrize('method',['generate','chat'])
+@pytest.mark.parametrize('effort',['on','off'])
+@pytest.mark.parametrize('model,url,key',[
+    ('qwen3.8-flash','https://dashscope.aliyuncs.com/compatible-mode/v1','enable_thinking'),
+    ('deepseek-flash','https://api.deepseek.com/v1','thinking'),
+])
+def test_thinking_switch_wire(method,effort,model,url,key):
+    captured={}
+    def handle(req):
+        captured.update(json.loads(req.content))
+        return httpx.Response(200,json={'choices':[{'finish_reason':'stop','message':{'role':'assistant','content':'ok'}}]})
+    c=DoctransaiLLMClient(DoctransaiLLMConfig(api_key='test',base_url=url,model_name=model,
+        reasoning_effort=effort,transport=httpx.MockTransport(handle)))
+    if method=='generate':c.generate(system_prompt='system',user_prompt='input')
+    else:c.chat([],[],stream=False)
+    assert 'reasoning_effort' not in captured
+    assert captured[key]==({'type':'enabled' if effort=='on' else 'disabled'} if key=='thinking' else effort=='on')
+
+
+def test_thinking_switch_rejects_unsupported_models_and_gateways():
+    with pytest.raises(ValueError):RuntimeConfig(model='kimi-k3',reasoning_effort='off')
+    with pytest.raises(ValueError):RuntimeConfig(model='unknown',reasoning_effort='off')
+    with pytest.raises(ValueError):
+        DoctransaiLLMClient(DoctransaiLLMConfig(api_key='test',base_url='https://unknown.test/v1',
+            model_name='qwen3.8-flash',reasoning_effort='off'))

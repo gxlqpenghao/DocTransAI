@@ -13,15 +13,30 @@ function updateStart(){
   $('start').disabled=busy||!configuration?.ready;
   $('start').firstElementChild.textContent=busy?'任务运行中':'开始转换';
   for(const kind of ['source','template']){$(kind).disabled=busy;$(kind+'-drop').classList.toggle('locked',busy);}
-  document.querySelector('[data-open="settings-dialog"]').disabled=busy;
+  document.querySelectorAll('#inline-settings input,#inline-settings select').forEach(el=>el.disabled=busy);
+  updateThinking();
 }
-function settingsSummary(){$('settings-summary').textContent=`${$('model').value||configuration?.defaults.model||'后端模型'} · ${$('mode').value==='workspace'?'工作区':'ZIP'}`;}
+function settingsSummary(){updateThinking();}
+function updateThinking(){
+  const model=$('model').value.trim(), supported=Boolean(configuration?.thinking_models?.[model]), kimi=model.split('/').pop()==='kimi-k3';
+  const reason=kimi?'当前Kimi K3仅支持思考，无法关闭。':'当前模型与后端服务的思考开关尚未适配。';
+  $('thinking-on').disabled=busy||(!supported&&!kimi);$('thinking-off').disabled=busy||!supported;
+  const off=$('reasoning-effort').value==='off';
+  $('thinking-on').setAttribute('aria-pressed',String(!off&&(supported||kimi)));$('thinking-off').setAttribute('aria-pressed',String(off));
+  const onTip='开启：侧重复杂理解、字段对应与核对，通常耗时更长；不保证结果无误。';
+  const offTip='关闭：通常响应更快，复杂任务可能遗漏细节；尚未完成本项目的开关质量对照。';
+  $('thinking-on-tip').title=(!supported&&!kimi?reason+' ':'')+onTip;
+  $('thinking-off-tip').title=(supported?'':reason+' ')+offTip;
+  $('thinking-on').setAttribute('aria-label','开启思考');$('thinking-off').setAttribute('aria-label','关闭思考');
+  $('thinking-on-tip').dataset.tip=$('thinking-on-tip').title;$('thinking-off-tip').dataset.tip=$('thinking-off-tip').title;
+  $('thinking-note').textContent=kimi?'K3 · '+$('reasoning-effort').value+'，不支持关闭':supported?(off?'已关闭思考':'已开启思考'):'沿用后端策略 · 开关未适配';
+}
 async function loadConfiguration(initial=false){
   try{
     configuration=await api('/api/config');$('version').textContent=`v${configuration.version}`;
     $('config-status').replaceChildren(...configuration.checks.map(check=>{const span=document.createElement('span');span.className=`check ${check.ok?'good':'bad'}`;span.textContent=check.label+(check.ok?'已配置':'未就绪');return span;}));
     document.querySelector('.environment').classList.toggle('warn',!configuration.ready);
-    if(initial){$('model').value=configuration.defaults.model;$('max-output-tokens').value=configuration.defaults.max_output_tokens;$('reasoning-effort').value=configuration.defaults.reasoning_effort||'auto';}
+    if(initial){$('model').value=configuration.defaults.model;$('max-output-tokens').value=configuration.defaults.max_output_tokens;$('reasoning-effort').value=configuration.defaults.reasoning_effort||'auto';if(configuration.thinking_models?.[$('model').value]&&$('reasoning-effort').value!=='off')$('reasoning-effort').value='on';}
     settingsSummary();updateStart();
   }catch(e){configuration=null;updateStart();$('config-status').textContent='本地服务连接中断';error(e.message);}
 }
@@ -47,9 +62,10 @@ for(const kind of ['source','template']){
 for(const button of document.querySelectorAll('[data-open]'))button.addEventListener('click',()=>openDialog(button.dataset.open));
 for(const button of document.querySelectorAll('[data-close]'))button.addEventListener('click',()=>button.closest('dialog').close());
 for(const button of document.querySelectorAll('.mobile-tabs button'))button.addEventListener('click',()=>panel(button.dataset.panel));
-$('model').addEventListener('input',()=>{$('reasoning-effort').value='auto';settingsSummary();});
+$('model').addEventListener('input',()=>{$('reasoning-effort').value=configuration?.thinking_models?.[$('model').value.trim()]?'on':$('model').value.trim().split('/').pop()==='kimi-k3'?'high':'auto';settingsSummary();});
 $('mode').addEventListener('change',settingsSummary);
-$('settings-form').addEventListener('submit',e=>{e.preventDefault();settingsSummary();$('settings-dialog').close();});
+$('thinking-on').addEventListener('click',()=>{$('reasoning-effort').value=$('model').value.split('/').pop()==='kimi-k3'?'high':'on';updateThinking();});
+$('thinking-off').addEventListener('click',()=>{$('reasoning-effort').value='off';updateThinking();});
 $('refresh-config').addEventListener('click',()=>loadConfiguration());
 $('open-details').addEventListener('click',()=>openDialog('details-dialog'));
 $('open-history').addEventListener('click',()=>{loadHistory(false);openDialog('history-dialog');});
@@ -116,7 +132,7 @@ $('conversion-form').addEventListener('submit',async e=>{
   if(!source||!template)return error('请选择源文档和目标模板。');
   if(!/\.(docx|xlsx)$/i.test(template.name))return error('模板仅支持DOCX或XLSX，DOC模板请先转换。');
   if(source.size>configuration.max_source_bytes||template.size>configuration.max_template_bytes)return error('文件超限：源文档100 MiB，模板20 MiB。');
-  if(!$('max-output-tokens').checkValidity()){openDialog('settings-dialog');$('max-output-tokens').reportValidity();return;}
+  if(!$('max-output-tokens').checkValidity()){$('max-output-tokens').reportValidity();return;}
   const data=new FormData();data.append('source',source);data.append('template',template);
   data.append('settings',JSON.stringify({model:$('model').value,max_output_tokens:Number($('max-output-tokens').value),reasoning_effort:$('reasoning-effort').value,mode:$('mode').value,allow_degraded:$('allow-degraded').checked}));
   error('');clearResult();busy=true;updateStart();
