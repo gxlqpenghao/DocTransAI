@@ -9,7 +9,7 @@ try {
     else {
         $uvPath = Join-Path (Get-Location) 'runtime\uv\uv.exe'
         if (!(Test-Path $uvPath)) {
-            Write-Host 'Downloading pinned uv Windows runtime from PyPI...'
+            Write-Host 'Preparing pinned uv Windows runtime (bundled archive or PyPI)...'
             $uvDir = Split-Path $uvPath -Parent
             New-Item -ItemType Directory -Force $uvDir | Out-Null
             $archive = Join-Path $uvDir 'uv-wheel.zip'
