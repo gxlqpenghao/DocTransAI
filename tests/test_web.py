@@ -34,7 +34,7 @@ def template():
 
 
 def submit(client, app, **extra):
-    kwargs=dict(headers={'X-DocTransAI-Token':app.token},files={'source':('source.txt',b'Example source'),'template':('template.docx',template())},data={'instruction':'Fill from source','settings':'{}'})
+    kwargs=dict(headers={'X-DocTransAI-Token':app.token},files={'source':('source.txt',b'Example source'),'template':('template.docx',template())},data={'settings':'{}'})
     kwargs.update(extra)
     return client.post('/api/jobs',**kwargs)
 
@@ -60,6 +60,7 @@ def test_files_saved_separately_and_busy_prevents_second_job(server):
     job=r.json()['id'];root=app.root/job
     assert (root/'source/source.txt').read_bytes()==b'Example source'
     assert (root/'template/template.docx').is_file()
+    assert 'instruction' not in json.loads((root/'request.json').read_text())
     assert submit(client,app).status_code==409
     assert len(list(app.root.iterdir()))==1
     assert client.get('/api/jobs').json()['jobs'][0]['id']==job
@@ -130,6 +131,7 @@ def test_worker_calls_existing_workflow_and_preserves_template_boundary(server,m
     assert state['status']=='completed'
     assert called['source'].parent.name=='source' and called['template'].parent.name=='template'
     assert called['api_key']=='private-upstream-key'
+    assert called['instruction'] is None
     assert any(e['message']=='Audit running' for e in state['events'])
 
 
@@ -155,3 +157,10 @@ def test_server_rejects_unknown_or_invalid_model_settings(app):
     with pytest.raises(ValueError):settings_config({'max_output_tokens':-10},app.env_file)
     cfg=settings_config({'model':'custom-vision-model'},app.env_file)
     assert cfg.reasoning_effort=='omit'
+
+
+def test_web_does_not_accept_hidden_task_instructions(server):
+    client,app=server
+    r=submit(client,app,data={'settings':'{}','instruction':'hidden override'})
+    assert r.status_code==400
+    assert not list(app.root.iterdir())

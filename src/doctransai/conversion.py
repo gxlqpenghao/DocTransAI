@@ -44,8 +44,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
     final = None
     runtime = None
     try:
-        if not task.instruction.strip():
-            raise ValueError("A conversion instruction is required")
+        if task.instruction is not None and (not isinstance(task.instruction, str) or not task.instruction.strip()):
+            raise ValueError("An explicit conversion instruction must be nonempty")
         suffix = task.template_path.suffix.lower()
         if suffix not in (".docx", ".xlsx"):
             raise ValueError("Targets must be DOCX or XLSX; legacy templates need explicit materialization first")
@@ -110,8 +110,10 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                 initial_source["source_pages_omitted"] = len(rendered_source_pages) - config.initial_source_pages
                 source_page_paths = rendered_source_pages[:config.initial_source_pages]
         initial_source["prepared_source_page_count"] = len(source_page_paths)
-        initial = dict(instruction=task.instruction, primary_source_refs=list(task.source_refs),
+        initial = dict(primary_source_refs=list(task.source_refs),
                        source=initial_source, document=reference_snapshot)
+        if task.instruction is not None:
+            initial['instruction'] = task.instruction
         (output_dir / "input.json").write_text(json.dumps(initial, ensure_ascii=False, indent=2))
         parts = [{"type": "text", "text": json.dumps(initial, ensure_ascii=False)}]
         prepared_source_image_paths = []

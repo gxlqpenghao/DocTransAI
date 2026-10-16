@@ -170,7 +170,7 @@ def run_review(source, editor, previewer, initial, client, config, trace, deadli
     pages = previewer.render(editor.output)
     append_event(trace, dict(kind="review_start", read_only=True, document_sha256=before, prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest()))
     snapshot = editor.inspect()
-    context = dict(step_budget=config.review_max_steps, time_remaining_seconds=max(0,int(deadline-time.monotonic())), task_instruction=initial['instruction'], primary_source_refs=initial['primary_source_refs'],
+    context = dict(step_budget=config.review_max_steps, time_remaining_seconds=max(0,int(deadline-time.monotonic())), task_instruction=initial.get('instruction'), primary_source_refs=initial['primary_source_refs'],
         source=initial['source'], original_template=initial['document'], current_document=snapshot,
         application_requirements=(Path(__file__).parent/'prompts/document_editing_policy.md').read_text(),
         repair_permissions={kind: [op for op in snapshot["supported_operations"] if RepairRuntime._operation_allowed(kind,op)] for kind in ISSUE_KINDS if kind not in ("ambiguity","unsupported")},
@@ -214,7 +214,7 @@ def review_and_repair(source, editor, previewer, initial, client, config, output
         if progress:progress(f'有限修正 {round_number + 1}：仅处理复核指出的位置')
         runtime=RepairRuntime(source,editor,previewer,repairable)
         prompt=(Path(__file__).parent/'prompts/document_editing_policy.md').read_text()
-        instruction=dict(step_budget=config.repair_max_steps, time_remaining_seconds=max(0,int(deadline-time.monotonic())), task_instruction=initial['instruction'],primary_source_refs=initial['primary_source_refs'],
+        instruction=dict(step_budget=config.repair_max_steps, time_remaining_seconds=max(0,int(deadline-time.monotonic())), task_instruction=initial.get('instruction'),primary_source_refs=initial['primary_source_refs'],
             source=initial['source'],current_document=editor.inspect(),review_findings=repairable,
             repair_rule='Only repair these findings at authorized targets. Preserve other facts and structure. Do not invent missing evidence. Preview all output pages and finish; another independent review decides acceptance.')
         messages=[dict(role='system',content=prompt),dict(role='user',content=json.dumps(instruction,ensure_ascii=False))]

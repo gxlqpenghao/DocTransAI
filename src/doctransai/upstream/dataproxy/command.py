@@ -42,8 +42,8 @@ def main(argv):
         if a.publish_receipt:
             result = publish_workspace(receipt_path=a.publish_receipt, replace_audit=a.replace_audit, **common)
         else:
-            if not a.template or not a.output_dir or not a.instruction:
-                raise ValueError('Template, output directory and instruction are required')
+            if not a.template or not a.output_dir:
+                raise ValueError('Template and output directory are required')
             config = RuntimeConfig.from_environment(env_file=a.env_file, render_script=a.render_script,
                 render_python=a.render_python, max_seconds=a.conversion_timeout, max_steps=a.max_steps,
                 _default_output_tokens=16000, **model_overrides(a))
