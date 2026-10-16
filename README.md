@@ -4,10 +4,12 @@ DocTransAI将DataProxy解析的源材料，按业务要求填入DOCX或XLSX模�
 
 **当前版本：1.2.0。** 支持ZIP和任务工作区两种接入方式；LLM可配置，不再限定K3。默认模型仍为`kimi-k3`。本公开仓库提供源代码、合成测试和接入文档，不包含业务样本、内部验收材料或私有仓库历史。其他模型必须满足下述接口能力，并由接入项目用自己的材料验收。
 
+**先试用页面：** [本地Web测试台](#4-本地web测试台) · [详细操作说明](docs/local-test-ui.md) · [交付审计](#7-交付物与人工审查)
+
 ## 1. 在业务项目中的位置
 
 ```text
-业务前端：上传源材料、选择模板、填写要求、查看成品与审计
+业务前端：上传源材料、选择模板、一键转换、查看成品与审计
     ↓
 业务后端：安装并调用DocTransAI，保存业务任务与用户权限
     ├─ 使用项目授权Key → 授权的DataProxy服务 → 解析、知识库入库、交付资料
@@ -86,6 +88,8 @@ DOCTRANSAI_RENDER_PYTHON=/absolute/path/python3
 
 配置优先级：**显式CLI/Python参数 → 进程环境变量 → 指定配置文件 → 默认值**。配置文件按`KEY=value`读取，可有引号与`export`前缀，但不执行shell、不展开变量或命令。
 
+如果管理员明确指定非本机HTTP入口，另设置`DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN`为与Base URL完全相同的协议、主机和端口；HTTP不提供传输加密，仅用于已批准的部署环境。HTTPS保持默认要求。
+
 DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传任意知识库ID。源文档上传到授权知识库后，管理员可按权限审阅解析任务和资产。
 
 ### 切换模型
@@ -95,21 +99,52 @@ DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传�
 - `reasoning-effort=auto`：K3使用`high`，其他模型不发送`reasoning_effort`。
 - `reasoning-effort=omit`：不发送该字段，适用于不支持它的模型；它不表示服务端关闭思考。
 - `none/low/medium/high/max`等值：按服务商支持情况显式配置，客户端原样发送。K3仍只接受`low/high/max`。
+- `reasoning-effort=on/off`：在已适配的模型与服务地址组合上发送真正的思考开关参数，详见[思考开关适配](docs/local-test-ui.md#思考开关适配)。
 - 非K3模型默认不发送`temperature`；需要时设置数值。`temperature=omit`可显式省略。
 - 服务商若要求`max_completion_tokens`，将`DOCTRANSAI_LLM_TOKEN_PARAMETER`或`--token-parameter`改为该值。
 - 不支持流式usage选项的兼容网关，可设置`DOCTRANSAI_LLM_STREAM_USAGE=false`；缺失用量记录为未知，不当作零消耗。
 
-模型可调用并不代表转换质量已验收。需要使用该模型检查真实模板的图片理解、工具调用、证据引用、分页及审计表现。当前真实公网业务验收基于K3；其他模型的本次验证是配置和请求契约测试。
+模型可调用并不代表转换质量已验收。需要使用该模型检查真实模板的图片理解、工具调用、证据引用、分页及审计表现。当前真实公网业务验收基于K3；其他模型的配置适配或单次审计实验不代表完整转换质量已验收；当前正式方案未因开发实验切换。
 
-## 4. 方式A：ZIP接入
+## 4. 本地Web测试台
 
-如果希望通过本地网页上传文件和查看结果，可以直接运行：
+项目已内置本地Python服务与单页前端，开发、演示和人工验收无需逐次输入转换命令；不需要Node.js或前端构建。完成上面的依赖安装，并在后端配置DataProxy地址、项目授权Key、LLM和文档渲染器后启动：
 
 ```bash
 uv run doctransai web --env-file .env
 ```
 
-打开 `http://127.0.0.1:8765`，选择源文档和DOCX/XLSX模板后点击“开始转换”，无需填写提示词。页面采用一屏双面板；模型、token和思考开关直接显示在上传区下方，历史任务、诊断与审计在弹窗查看。固定填写规则维护在 `src/doctransai/prompts/document_editing_policy.md`，审计规则维护在 `src/doctransai/audit.py`。仅源文档提交给DataProxy，模板和密钥保留在本地后端。详见[本地测试页面说明](docs/local-test-ui.md)。
+浏览器打开 **[http://127.0.0.1:8765](http://127.0.0.1:8765)**。服务仅监听本机；保留启动终端，按Ctrl+C会停止服务。网页出现“拒绝连接”时，先确认服务仍在运行、端口是否正确。需要长期运行时由部署方配置进程管理，不依赖临时终端会话。
+
+### 页面怎么用
+
+1. **上传源文档**：选择或拖入需要转换的材料，最大100 MiB；支持范围取决于DataProxy，包括PDF、DOC/DOCX、Excel、PPT、文本和常见图片。
+2. **上传目标模板**：DOCX或XLSX，最大20 MiB。源DOC可以解析，旧DOC模板仍需先转为DOCX。
+3. **直接调整设置**：上传区下方提供模型ID、输出token上限、思考开关、ZIP/工作区方式。无需打开高级设置弹窗，也无需填写转换提示词。
+4. **点击开始转换**：右侧显示解析、填写、审计、交付阶段，以及真实模型响应状态、工具操作、累计耗时和距上次动态的时间。不会展示内部思考原文或模拟完成百分比。
+5. **查看结果**：下载转换文档、打开字段审计；历史任务及诊断详情在弹窗查看。更换文件会清除旧结果展示，但保留历史记录。
+
+桌面为一屏双面板，窄屏通过“上传材料 / 运行结果”切换。运行时展示最近六条动态，结束后自动收起；长审计和诊断记录在弹窗内查看。
+
+### 设置与交付规则
+
+- **凭证留在后端**：页面不输入或返回密钥。仅源文档提交DataProxy，模板在本地处理；模型会接收转换所需材料和预览。
+- **思考开关按模型与服务商适配**：当前K3使用后端强度（默认high），关闭选项置灰；已适配的模型可开关，不支持或未知组合置灰并显示原因。只改模型ID不会切换服务地址或密钥。
+- **降级是提示**：DataProxy的degraded默认继续使用，不需要勾选放行；上游警告只留在诊断详情。解析失败、交付缺失或完整性校验失败仍停止。
+- **审计只交付三类填写结果**：已填入且确信度高、已填入且确信度低、未填入，保留字段理由、依据和关联操作，不混入上游警告及内部运行日志。
+- **规则统一维护**：填写提示词见[document_editing_policy.md](src/doctransai/prompts/document_editing_policy.md)，审计规则见[audit.py](src/doctransai/audit.py)。前端不追加重复的默认转换指令。
+
+任务默认保存在 `outputs/web/<任务ID>/`，当前同时运行一个任务。刷新页面不会自动重复提交；重启服务不会自动续跑中断任务。若成品已生成但审计失败，仍可下载待复核文档，页面不会将其标为完整成功。
+
+自定义端口与任务目录：
+
+```bash
+uv run doctransai web --env-file /secure/backend.env --port 8765 --runs-dir ./outputs/web
+```
+
+该页面用于单机测试，不是多用户业务系统。详细说明见[本地测试页面](docs/local-test-ui.md)；正式运行与开发分支约定见[开发工作流](docs/development-workflow.md)。
+
+## 5. 方式A：ZIP接入
 
 适合已有本地文件流水线或自有存储的业务后端。
 
@@ -126,7 +161,7 @@ uv run doctransai remote --env-file .env --mode zip \
 
 同一个成功解析任务可直接复用，改用`--job-id <job_id>`代替`--source-file`，避免重复上传。`job_id`保存在输出目录的`integration.json`中。
 
-## 5. 方式B：工作区接入
+## 6. 方式B：工作区接入
 
 使用同一解析任务，无需再次解析：
 
@@ -154,7 +189,7 @@ state/doctransai.json
 
 同一项目、job ID和run ID复用同一有效工作区。解析ZIP过期但已有工作区仍有效时，可以加`--workspace-id <ID>`直接读取快照。工作区有保留期与配额，默认7天保留期，以实际部署为准，应及时导出和备份。
 
-## 6. 交付物与人工审查
+## 7. 交付物与人工审查
 
 ```text
 runs/<本次运行>/
@@ -179,9 +214,8 @@ runs/<本次运行>/
 | `filled_high` | 已填入，模型认为源证据直接支持；程序另外核验引用和摘录 | 根据业务要求抽查、确认 |
 | `filled_low` | 已填入，但有推断、识别疑点、引用摘录未核验等情况 | 阅读具体理由，核对源材料并修正 |
 | `unfilled` | 未填、占位符未落实或相关位置被删除 | 查看缺少依据、歧义、不适用或失败原因 |
-| `not_field` | 标题、标签或版式，不是实际填报位置 | 不计入未填写项，可检查识别是否合理 |
 
-`audit.json`使用`schema_version: doctransai.audit.v1`。`fields[]`包含`field_id`、`location`、`field_label`、`before`、`after`、`category`、`reason`、`review_action`、`evidence`和`operation_ids`。`operations`与`activity_log`保留成功、拒绝和回滚记录；源证据与操作日志引用区分存储。DOCX使用节点及表格位置，XLSX使用工作表/单元格地址；DOCX的table/row/column索引从0开始。
+`audit.json`使用`schema_version: doctransai.audit.v1`。`fields[]`包含`field_id`、`location`、`field_label`、`before`、`after`、`category`、`reason`、`review_action`、`evidence`和`operation_ids`。`operations`保留与交付字段关联的成功、拒绝和回滚记录；源证据与操作日志引用区分存储。固定标题/标签的内部识别、完整`activity_log`与上游诊断另存本地`audit-diagnostics.json`，不属于交付审计。DOCX使用节点及表格位置，XLSX使用工作表/单元格地址；DOCX的table/row/column索引从0开始。
 
 **确信度不是统计概率，也不等于人工认证。** 写入成功、原生引用存在与内容真实正确分别记录。报告绑定`document_sha256`，成品被修改后原审计不能继续作为该新版本的有效审计。当前不提供在线人工修改审批系统，业务项目可在此JSON之上实现自己的复核流程。
 
@@ -193,7 +227,7 @@ uv run doctransai audit --env-file .env --run-dir ./runs/workspace-001/conversio
 
 该命令核对已有成品，不重跑填写。对于人工修改过的成品，应先通过`review`形成绑定新哈希的新运行目录，再审计；不能直接沿用旧报告哈希。审计失败会明确标记`needs_manual_audit`，不会把未审部分标为高确信度。
 
-## 7. 开发时可调参数
+## 8. 开发时可调参数
 
 以下模型参数在`remote`、`convert`、`review`、`audit`命令均可使用。
 
@@ -237,7 +271,7 @@ uv run doctransai remote --env-file .env --mode zip \
 
 `max_completion_tokens`只是配置示例，必须按实际服务商协议选择。不要把提高预算视作质量保证，也不要为不支持思考参数的模型强行发送该参数。
 
-## 8. 后端Python集成
+## 9. 后端Python集成
 
 ```python
 from pathlib import Path
@@ -266,11 +300,11 @@ if receipt['status'] != 'completed':
 
 `run_remote`是阻塞调用，适合放入业务后端的任务队列/Worker。工作区方式将`mode`改为`workspace`并传稳定`run_id`；复用解析结果时传`job_id`而不传`source`。
 
-## 9. 错误、重试和保留
+## 10. 错误、重试和保留
 
 - 上传响应丢失：在新输出目录复用原`request_id`和同名同内容文件。不要立即换ID重复解析。
 - 已知job ID：用`--job-id`恢复；客户端超时不会取消服务端任务。
-- 质量`failed`、文件哈希/路径/schema错误：停止转换。`degraded`默认停止，只有明确业务策略允许后才放行。
+- 质量`failed`、文件哈希/路径/schema错误：停止转换。`degraded`默认继续使用，警告保留在运行诊断，不自动降低字段确信度。
 - `finish_reason=length`：截断模型输出不会执行为工具调用。检查失败报告，明确调整输出预算后在新目录重试。
 - 审计失败：保留成品及保守台账，状态为`audit_failed`；可单独运行audit，不必重新填写。
 - 回写失败：用`remote --env-file .env --publish-receipt <integration.json>`恢复，避免重复模型费用。
@@ -279,7 +313,9 @@ if receipt['status'] != 'completed':
 
 工作区的只读资料不会被下游修改；成果和状态仅写入可写区域。ZIP本地副本和业务成品的访问控制、备份及清理由业务项目负责。
 
-## 10. 验证与能力边界
+## 11. 验证与能力边界
+
+运行`uv run pytest -q`可执行当前发布测试集。
 
 本项目保留模板、来源、修改与渲染记录，但不是无人值守的业务签发系统。复杂浮动文本框、复杂嵌套表、宏、透视表、外部链接等不在完整支持范围；日期语义、角色归属、图片对应和模糊材料仍需人工检查。
 
@@ -287,7 +323,7 @@ if receipt['status'] != 'completed':
 uv run pytest tests/test_audit.py tests/upstream/test_service.py \
   tests/upstream/test_remote_workflow.py tests/data_layer \
   tests/integration/test_document_tools.py \
-  tests/integration/test_independent_review.py tests/llm -q
+  tests/integration/test_independent_review.py tests/llm tests/test_web.py -q
 ```
 
-公开代码基于1.2.0版本，提供136项定向回归测试（使用合成资料和模拟接口，不依赖业务样本）。内部运行记录不随公开仓库发布；接入方应使用自己的资料、授权服务和模型进行业务验收。详细流程见[接入说明](docs/downstream-integration.md)。
+公开代码基于1.2.0版本，当前main提供175项回归测试（使用合成资料和模拟接口，不依赖业务样本）。内部运行记录不随公开仓库发布；接入方应使用自己的资料、授权服务和模型进行业务验收。详细流程见[接入说明](docs/downstream-integration.md)。
