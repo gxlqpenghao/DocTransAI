@@ -241,6 +241,15 @@ class DoctransaiLLMClient:
             raise DoctransaiLLMConfigurationError("LLM response content is missing or not text.")
         return content
 
+    def _notify_progress(self, message):
+        # Observation must never break generation; no model text or tool arguments.
+        callback = getattr(self, 'progress', None)
+        if callback:
+            try:
+                callback(message)
+            except Exception:
+                pass
+
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
              stream: bool = True, deadline: float | None = None) -> dict[str, Any]:
         """One model request. No automatic retries or tool execution here."""
@@ -249,9 +258,13 @@ class DoctransaiLLMClient:
         if recorder is not None:
             handle = recorder.begin_request(messages=messages, tools=tools,
                                             model=self.model_name, stream=stream)
+        self._notify_progress('已发起模型请求，等待响应。')
         try:
-            return self._chat_inner(messages, tools, stream=stream, deadline=deadline, handle=handle)
+            result = self._chat_inner(messages, tools, stream=stream, deadline=deadline, handle=handle)
+            self._notify_progress('本轮模型响应已接收完成。')
+            return result
         except Exception as exc:
+            self._notify_progress('本轮模型请求异常，正在处理错误。')
             # _chat_inner already records failures with partial stream data;
             # this covers errors raised before the stream loop was entered.
             if handle is not None:
@@ -303,6 +316,7 @@ class DoctransaiLLMClient:
                 calls: dict[int, dict[str, Any]] = {}
                 usage, finish_reason, done = None, None, False
                 returned_model = self.model_name
+                last_notice, last_kind = 0.0, None
                 try:
                     for line in response.iter_lines():
                         if deadline is not None and time.monotonic() >= deadline:
@@ -332,6 +346,13 @@ class DoctransaiLLMClient:
                                 continue
                             finish_reason = choice.get("finish_reason") or finish_reason
                             delta = choice.get("delta", {})
+                            kind = ('tools' if delta.get('tool_calls') else 'content' if delta.get('content') else 'reasoning' if delta.get('reasoning_content') else None)
+                            if kind:
+                                now = time.monotonic()
+                                if now - last_notice >= 3 or last_kind is None:
+                                    labels = {'tools':'模型正在生成操作参数，尚未执行。', 'content':'正在接收模型响应内容。', 'reasoning':'模型正在思考，已收到实时响应。'}
+                                    self._notify_progress(labels[kind])
+                                    last_notice, last_kind = now, kind
                             if handle is not None and (any(delta.get(key) for key in ("content", "reasoning_content")) or delta.get("tool_calls")):
                                 handle.mark_stream_event("first_delta")
                             for key in ("content", "reasoning_content"):

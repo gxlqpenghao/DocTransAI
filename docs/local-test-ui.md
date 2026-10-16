@@ -62,3 +62,9 @@ outputs/web/<本地任务ID>/
 Python/CLI可使用 `reasoning_effort='on'/'off'`（CLI为 `--reasoning-effort on/off`），在这些已适配组合上转换为对应请求字段，不会发送字面值on/off作为服务商的reasoning_effort。原有high等强度配置仍然支持。参数协议已通过模拟HTTP测试，本次未调用这些新模型做真实转换或质量对照。
 
 协议依据：[百炼Qwen3.8 Flash](https://help.aliyun.com/zh/model-studio/token-plan-playbook-code-review)、[Kimi](https://help.aliyun.com/zh/model-studio/kimi-api)、[DeepSeek思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)。
+
+## 实时运行动态
+
+运行时右侧展示最近六条真实阶段/工具事件，并显示累计耗时、距上次动态的时间。转换与审计的流式模型请求会报告等待响应、收到思考响应、收到内容、生成操作参数及本轮完成；流式通知最多约每三秒一次，不新增模型调用。不会显示原始reasoning_content、生成正文或工具参数，不将参数生成误标为已执行。没有新事件时只更新等待计时，不虚构完成百分比。观察回调异常不会中断模型请求。
+
+完成、失败或中断后动态区自动收起，记录保留在“诊断详情”。前端每两秒拉取状态；没有提供流式内容的服务商只能显示请求等待和完成事件。旧任务仅能展示原有记录，不能补回当时未记录的实时动态。

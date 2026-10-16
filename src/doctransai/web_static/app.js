@@ -42,6 +42,7 @@ async function loadConfiguration(initial=false){
 }
 function clearResult(){
   clearTimeout(pollTimer);viewGeneration++;currentJob=null;historical=false;sessionStorage.removeItem('doctransai.currentJob');
+  $('live-activity').hidden=true;$('activity-events').replaceChildren();
   $('empty-state').hidden=false;$('job-state').hidden=true;$('state-badge').textContent='等待开始';$('state-badge').className='state-badge';
   $('result-heading').textContent='运行结果';$('open-details').disabled=true;
   $('audit-frame').removeAttribute('src');if($('audit-dialog').open)$('audit-dialog').close();
@@ -73,6 +74,9 @@ $('open-history').addEventListener('click',()=>{loadHistory(false);openDialog('h
 function downloadLink(file,label,primary=false){const link=document.createElement('a');link.href=file.url;link.download=file.name;link.textContent=label;if(primary)link.className='main-download';return link;}
 function renderJob(job){
   currentJob=job;busy=!terminal.has(job.status);sessionStorage.setItem('doctransai.currentJob',job.id);updateStart();
+  document.querySelector('.results-panel').classList.toggle('is-running',busy);
+  $('live-activity').hidden=!busy;
+  renderActivity(job);
   $('empty-state').hidden=true;$('job-state').hidden=false;$('open-details').disabled=false;
   $('result-heading').textContent=historical?'历史任务结果':'运行结果';$('state-badge').textContent=statusLabels[job.status]||job.status;$('state-badge').className='state-badge '+job.status;
   $('task-files').textContent=`${job.source} → ${job.template}`;$('task-files').title=$('task-files').textContent;
@@ -104,6 +108,27 @@ function renderJob(job){
   $('task-ids').textContent=`本地任务：${job.id}\n解析任务：${job.job_id||'等待创建'}\n工作区：${job.workspace_id||'未创建'}`;
   $('events').replaceChildren(...(job.events||[]).map(event=>{const li=document.createElement('li');li.textContent=`${new Date(event.at*1000).toLocaleTimeString()} · ${event.message}`;return li;}));
 }
+function activityLabel(message){
+  const names={inspect_document:'检查模板结构',read_source:'读取源材料',edit_document:'填写模板',render_document:'生成文档预览',finish:'提交本轮转换结果'};
+  if(message.startsWith('工具：'))return '执行操作：'+(names[message.slice(3)]||message.slice(3));
+  return message;
+}
+function renderActivity(job){
+  $('activity-events').replaceChildren(...(job.events||[]).slice(-6).map(event=>{
+    const li=document.createElement('li'),time=document.createElement('time'),text=document.createElement('span');
+    time.textContent=new Date(event.at*1000).toLocaleTimeString();text.textContent=activityLabel(event.message);li.append(time,text);return li;
+  }));
+  updateActivityClock();
+}
+function updateActivityClock(){
+  if(!busy||!currentJob)return;
+  const since=Math.max(0,Math.floor(Date.now()/1000-(currentJob.updated_at||currentJob.created_at)));
+  $('activity-freshness').textContent=since<5?'刚收到动态':`距上次动态 ${since} 秒`;
+  $('activity-freshness').title='这是最近一次真实事件的时间，不代表完成百分比；静默期间可能仍在处理或等待网络。';
+  const elapsed=Math.max(0,Math.round(Date.now()/1000-currentJob.created_at));
+  $('job-time').textContent=`${currentJob.mode==='workspace'?'工作区':'ZIP'} · ${Math.floor(elapsed/60)}分${elapsed%60}秒`;
+}
+setInterval(updateActivityClock,1000);
 async function poll(jobId,generation=viewGeneration){
   clearTimeout(pollTimer);
   try{

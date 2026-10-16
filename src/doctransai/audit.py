@@ -187,7 +187,7 @@ def save_audit(run_dir, audit):
     (run_dir / 'audit.html').write_text(page)
 
 
-def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client=None, semantic=True):
+def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client=None, semantic=True, progress=None):
     run_dir = run_dir.resolve()
     audit = ledger(run_dir)
     save_audit(run_dir, audit)
@@ -208,6 +208,8 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
         client = client or DoctransaiLLMClient(DoctransaiLLMConfig(env_file=config.env_file,
             model_name=config.model, reasoning_effort=config.reasoning_effort, max_tokens=config.max_output_tokens,
             temperature=config.temperature, timeout_seconds=config.llm_timeout_seconds, token_parameter=config.token_parameter))
+        if progress and isinstance(client, DoctransaiLLMClient):
+            client.progress = progress
         payload = {k: audit[k] for k in ('fields','operations','source_context','instruction','parse_quality','conversion_issues')}
         audit['visual_coverage'] = dict(total_pages=len(report.get('output_pages', [])), supplied_pages=min(8,len(report.get('output_pages', []))))
         payload['visual_coverage'] = audit['visual_coverage']

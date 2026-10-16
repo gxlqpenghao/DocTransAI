@@ -135,6 +135,8 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                 model_name=config.model, max_tokens=config.max_output_tokens,
                 reasoning_effort=config.reasoning_effort, temperature=config.temperature,
                 timeout_seconds=config.llm_timeout_seconds, token_parameter=config.token_parameter))
+        if progress and isinstance(client, DoctransaiLLMClient):
+            client.progress = progress
         diagnostics = None
         if config.model_diagnostics:
             # Local observation only: attaches to the client, records requests,
