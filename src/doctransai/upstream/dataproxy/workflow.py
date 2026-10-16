@@ -15,7 +15,7 @@ from .service import DataProxyClient, save_receipt
 def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
                instruction: str | None = None, config: RuntimeConfig, source: Path | None = None,
                job_id: str | None = None, mode='zip', request_id=None, run_id=None,
-               allow_degraded=False, timeout=1800, transport=None, progress=None,
+               allow_degraded=True, timeout=1800, transport=None, progress=None,
                workspace_id=None, event_callback=None, allowed_http_origin=None):
     allowed_http_origin = allowed_http_origin or setting('DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN', env_values(config.env_file))
     def event(phase, message):

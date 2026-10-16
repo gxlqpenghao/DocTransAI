@@ -88,7 +88,6 @@ function renderJob(job){
   $('phase-track').hidden=terminal.has(job.status);
   document.querySelectorAll('[data-step]').forEach((node,i)=>{node.classList.toggle('done',i<index);node.classList.toggle('active',i===Math.min(index,3));});
   const warnings=job.parse_quality==='degraded'||job.warnings?.length;
-  $('quality-warning').hidden=!warnings;$('quality-warning').textContent='解析包含质量警告，请在审计中核对。';
   const audit=job.audit||{},counts=audit.counts||{};
   $('audit-summary').hidden=!audit.status;
   $('audit-summary').textContent=audit.status==='assessed'?`高确信度 ${counts.filled_high||0} · 低确信度 ${counts.filled_low||0} · 未填写 ${counts.unfilled||0}`:'审计尚未完成，已有文档需要人工复核';
@@ -104,7 +103,7 @@ function renderJob(job){
       extras.append(downloadLink(file,labels[file.name]||file.name));
     }
   }
-  $('detail-message').textContent=job.message+(warnings?`\n解析质量：${job.parse_quality||'待确认'}；${job.warnings?.length||0}条警告。`:'');
+  $('detail-message').textContent=job.message+(warnings?`\n解析质量：${job.parse_quality||'待确认'}；上游警告仅用于运行诊断：${JSON.stringify(job.warnings||[])}`:'');
   $('task-ids').textContent=`本地任务：${job.id}\n解析任务：${job.job_id||'等待创建'}\n工作区：${job.workspace_id||'未创建'}`;
   $('events').replaceChildren(...(job.events||[]).map(event=>{const li=document.createElement('li');li.textContent=`${new Date(event.at*1000).toLocaleTimeString()} · ${event.message}`;return li;}));
 }
@@ -159,7 +158,7 @@ $('conversion-form').addEventListener('submit',async e=>{
   if(source.size>configuration.max_source_bytes||template.size>configuration.max_template_bytes)return error('文件超限：源文档100 MiB，模板20 MiB。');
   if(!$('max-output-tokens').checkValidity()){$('max-output-tokens').reportValidity();return;}
   const data=new FormData();data.append('source',source);data.append('template',template);
-  data.append('settings',JSON.stringify({model:$('model').value,max_output_tokens:Number($('max-output-tokens').value),reasoning_effort:$('reasoning-effort').value,mode:$('mode').value,allow_degraded:$('allow-degraded').checked}));
+  data.append('settings',JSON.stringify({model:$('model').value,max_output_tokens:Number($('max-output-tokens').value),reasoning_effort:$('reasoning-effort').value,mode:$('mode').value}));
   error('');clearResult();busy=true;updateStart();
   try{const job=await api('/api/jobs',{method:'POST',headers:{'X-DocTransAI-Token':configuration.token},body:data});renderJob(job);panel('result');poll(job.id);loadHistory(false);}
   catch(e){busy=false;updateStart();error(e.message);}
