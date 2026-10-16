@@ -63,4 +63,11 @@ Python固定3.12.13，pypdfium2固定5.14.0，其余Python库见uv.lock。LibreO
 
 ## 当前验证状态
 
-开发验证已在macOS Apple Silicon、Python 3.12.13、LibreOffice 26.8.1.1、PDFium 5.14.0下完成解压包首次安装、中文DOCX/XLSX渲染及真实ZIP模式转换/审计/下载；仍需按发布记录确认Windows原生端到端验收，不能仅凭跨平台脚本或模拟测试宣布所有Windows环境可用。
+2026-10-16验证组合：macOS 15.7.3 Apple Silicon，以及5080原生Windows x64（系统build 22621）；Python 3.12.13、LibreOffice 26.8.1.1、PDFium 5.14.0。
+
+- Mac：解压包独立虚拟环境安装、自检、中文DOCX/XLSX预览、实际通知单/宽表多页预览，以及真实ZIP模式转换/审计/下载通过。
+- Windows：没有预装本项目Python环境的目录完成依赖准备；带中文及空格路径的独立目录使用随包uv/Python归档完成首次安装与自检。DOCX/XLSX PNG已目检，PDF嵌入MicrosoftYaHei字体。
+- Windows启动脚本通过cmd入口执行（自动化验收使用--no-browser），真实上传、转换、审计和三种结果下载已验证，原模板未改动。
+- 保留失败边界：Windows第一轮完成转换但审计返回非法来源引用，被程序正确拒绝；第二轮独立任务完整通过，未修补或覆盖第一轮结果。这说明部署链路可用，不代表模型对所有文档都能一次成功。
+
+Windows直连海外下载在本次环境不稳定，验收使用同一官方SHA256的预备归档完成安装；Windows交付ZIP因此包含这两份启动归档。LibreOffice与业务Python依赖仍需按指南准备。此版不是覆盖所有Windows版本、CPU架构、字体和业务模板的兼容性保证；Windows ARM64、Mac Intel及Docker运行未做本轮实机验收。
