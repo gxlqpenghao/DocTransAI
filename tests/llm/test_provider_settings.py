@@ -108,3 +108,24 @@ def test_thinking_switch_rejects_unsupported_models_and_gateways():
     with pytest.raises(ValueError):
         DoctransaiLLMClient(DoctransaiLLMConfig(api_key='test',base_url='https://unknown.test/v1',
             model_name='qwen3.8-flash',reasoning_effort='off'))
+
+
+def test_live_progress_is_content_free_and_observer_failure_is_nonfatal():
+    secret='private-reasoning-text'
+    events=[]
+    def handle(req):
+        chunks=[{'choices':[{'delta':{'reasoning_content':secret}}]},
+                {'choices':[{'delta':{'content':'private-output'},'finish_reason':'stop'}]}]
+        body=''.join('data: '+json.dumps(x)+'\n\n' for x in chunks)+'data: [DONE]\n\n'
+        return httpx.Response(200,headers={'content-type':'text/event-stream'},text=body)
+    client=DoctransaiLLMClient(DoctransaiLLMConfig(api_key='test',base_url='https://example.test/v1',transport=httpx.MockTransport(handle)))
+    client.progress=events.append
+    result=client.chat([],[])
+    assert result['message']['reasoning_content']==secret
+    assert events[0]=='已发起模型请求，等待响应。'
+    assert '模型正在思考，已收到实时响应。' in events
+    assert events[-1]=='本轮模型响应已接收完成。'
+    assert all(secret not in x and 'private-output' not in x for x in events)
+    def broken(_):raise OSError('observer failed')
+    client.progress=broken
+    assert client.chat([],[])['message']['content']=='private-output'

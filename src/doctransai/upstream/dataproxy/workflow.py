@@ -78,7 +78,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
             return receipt
         from doctransai.audit import audit_document
         event('auditing', '正在生成字段审计，核对填写依据与未填写原因。')
-        audit = audit_document(output_dir / 'conversion', config=config)
+        audit = audit_document(output_dir / 'conversion', config=config, **({'progress':progress} if progress else {}))
         save(audit_status=audit['status'])
         if audit['status'] != 'assessed':
             save(status='audit_failed')
