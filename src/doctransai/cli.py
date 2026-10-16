@@ -13,6 +13,15 @@ from doctransai.settings import add_model_arguments, model_overrides, env_values
 
 def main(argv: list[str] | None = None) -> int:
     actual = sys.argv[1:] if argv is None else argv
+    if actual and actual[0] == 'doctor':
+        from doctransai.doctor import main as doctor_main
+        return doctor_main(actual[1:])
+    if actual and actual[0] == 'render':
+        from doctransai.render_document import main as render_main
+        return render_main(actual[1:])
+    if actual and actual[0] == 'desktop':
+        from doctransai.desktop import main as desktop_main
+        return desktop_main(actual[1:])
     if actual and actual[0] == 'web':
         from doctransai.web import main as web_main
         return web_main(actual[1:])
@@ -25,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="doctransai")
     parser.add_argument("--version", action="store_true", help="Print the DocTransAI version.")
     commands = parser.add_subparsers(dest="command")
+    commands.add_parser('doctor', help='Check local dependencies and optional render smoke test')
+    commands.add_parser('render', help='Render documents with the bundled renderer')
+    commands.add_parser('desktop', help='Check configuration and open the local test page')
     commands.add_parser('web', help='Start the local document conversion test page (web --help)')
     commands.add_parser('remote', help='Convert through DataProxy ZIP or workspace APIs (remote --help)')
     commands.add_parser('audit', help='Assess template positions in an existing conversion (audit --help)')
