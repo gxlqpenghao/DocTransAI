@@ -4,10 +4,12 @@
 
 ## 启动
 
+首次配置后双击启动的Windows/Mac操作见[桌面部署指南](desktop-deployment.md)。默认不再需要外部render_docx.py或Codex运行时。
+
 ```bash
 uv sync --locked
 cp .env.example .env
-# 在.env中填写实际DataProxy地址、项目Key、LLM和renderer配置
+# 在.env中填写实际DataProxy地址、项目Key、LLM配置；安装LibreOffice，渲染器随项目提供
 uv run doctransai web --env-file .env
 ```
 

@@ -2,7 +2,7 @@
 
 DocTransAI将DataProxy解析的源材料，按业务要求填入DOCX或XLSX模板，并提供转换成品、字段审计和操作记录，供项目人员复核、修改与调试。
 
-**当前版本：1.2.0。** 支持ZIP和任务工作区两种接入方式；LLM可配置，不再限定K3。默认模型仍为`kimi-k3`。本公开仓库提供源代码、合成测试和接入文档，不包含业务样本、内部验收材料或私有仓库历史。其他模型必须满足下述接口能力，并由接入项目用自己的材料验收。
+**当前版本：1.3.0。** 支持ZIP和任务工作区两种接入方式；LLM可配置，不再限定K3。默认模型仍为`kimi-k3`。本公开仓库提供源代码、合成测试和接入文档，不包含业务样本、内部验收材料或私有仓库历史。其他模型必须满足下述接口能力，并由接入项目用自己的材料验收。
 
 **先试用页面：** [本地Web测试台](#4-本地web测试台) · [详细操作说明](docs/local-test-ui.md) · [交付审计](#7-交付物与人工审查)
 
@@ -35,29 +35,26 @@ uv run doctransai --version
 
 当前交付以完整源码安装为准，保留`src/`和`contracts/`；不要只拷贝一个wheel或入口脚本。默认输出格式为DOCX/XLSX，旧DOC模板需先显式转换为DOCX。
 
-文档预览还需要：
+**首次配置后双击启动：** Windows使用`setup-windows.cmd`完成首次准备，填写`.env`后使用`start-windows.cmd`；Mac对应`setup-macos.command`和`start-macos.command`。完整步骤见[桌面部署指南](docs/desktop-deployment.md)。首次需要联网安装依赖与LibreOffice，之后无需逐次输入命令。
 
-- 可运行的`render_docx.py`及其Python环境，包含`pdf2image`、Pillow等依赖。
-- LibreOffice Writer/Calc、Poppler（`pdftoppm`、`pdfinfo`）和中文字体。
-- 可用的模型网络连接；所选模型支持图片输入及函数工具调用。
+项目已自带渲染器，默认自动定位Python与LibreOffice，不需要安装Codex或提供`render_docx.py`。需要预先安装LibreOffice Writer/Calc及合适的中文字体。PDF页面转图由锁定的PDFium Python依赖完成，不再要求另装Poppler。特殊安装路径可设置`DOCTRANSAI_SOFFICE`，保留旧外部renderer覆盖能力。
 
-用`DOCTRANSAI_DOCX_RENDERER`和`DOCTRANSAI_RENDER_PYTHON`指定renderer路径及解释器。可使用部署方提供的Codex bundled renderer；源码包不捆绑Codex运行时。应先拿一份中文模板实际渲染并检查PNG，不能只检查提取文本。macOS使用bundled renderer与可见的CJK字体；Linux容器需安装自己的办公运行库与字体。
+安装后可运行 `uv run doctransai doctor --env-file .env --render-check outputs/first-check` 生成中文DOCX/XLSX预览自检；仍须目检PNG的中文字形与分页。
 
 独立运行镜像构建示例：
 
 ```bash
-docker build -t doctransai:1.2.0 .
+docker build -t doctransai:1.3.0 .
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
   --env-file /secure/doctransai.env \
-  -v /absolute/renderer-directory:/renderer:ro \
   -v /absolute/business-data:/work \
-  doctransai:1.2.0 remote --mode zip \
+  doctransai:1.3.0 remote --mode zip \
   --source-file /work/source.docx --template /work/template.docx \
   --output-dir /work/runs/example \
   --instruction '依据源材料填写模板，缺少依据的内容留空并说明。'
 ```
 
-Dockerfile安装办公工具、中文字体和renderer的`pdf2image`依赖。renderer目录需含`render_docx.py`；容器配置中的路径应使用容器路径，例如`/renderer/render_docx.py`和`python`。
+Dockerfile安装LibreOffice和Noto中文字体，并通过uv.lock安装Python依赖；项目内置渲染器随源码提供，无需额外挂载renderer目录。
 
 ## 3. 配置DataProxy授权与LLM
 
@@ -79,9 +76,8 @@ DOCTRANSAI_LLM_REASONING_EFFORT=auto
 DOCTRANSAI_LLM_TIMEOUT_SECONDS=180
 DOCTRANSAI_LLM_TOKEN_PARAMETER=max_tokens
 
-# 本机的真实renderer路径和解释器
-DOCTRANSAI_DOCX_RENDERER=/absolute/path/render_docx.py
-DOCTRANSAI_RENDER_PYTHON=/absolute/path/python3
+# 渲染器/Python自动定位；仅LibreOffice非标准安装时填写：
+# DOCTRANSAI_SOFFICE=C:/Program Files/LibreOffice/program/soffice.com
 ```
 
 调用CLI时显式传`--env-file .env`，或设置`DOCTRANSAI_ENV_FILE`。**不会自动加载当前目录的`.env`。** Docker的`--env-file`会将配置注入环境，通常无需再给CLI传同名参数。
@@ -108,7 +104,7 @@ DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传�
 
 ## 4. 本地Web测试台
 
-项目已内置本地Python服务与单页前端，开发、演示和人工验收无需逐次输入转换命令；不需要Node.js或前端构建。完成上面的依赖安装，并在后端配置DataProxy地址、项目授权Key、LLM和文档渲染器后启动：
+项目已内置本地Python服务与单页前端，开发、演示和人工验收无需逐次输入转换命令；不需要Node.js或前端构建。完成上面的依赖安装，并在后端配置DataProxy地址、项目授权Key、LLM并安装LibreOffice后启动：
 
 ```bash
 uv run doctransai web --env-file .env
@@ -326,4 +322,4 @@ uv run pytest tests/test_audit.py tests/upstream/test_service.py \
   tests/integration/test_independent_review.py tests/llm tests/test_web.py -q
 ```
 
-公开代码基于1.2.0版本，当前main提供175项回归测试（使用合成资料和模拟接口，不依赖业务样本）。内部运行记录不随公开仓库发布；接入方应使用自己的资料、授权服务和模型进行业务验收。详细流程见[接入说明](docs/downstream-integration.md)。
+公开代码基于1.3.0版本，当前发布测试集提供184项回归测试（使用合成资料和模拟接口，不依赖业务样本）。内部运行记录不随公开仓库发布；接入方应使用自己的资料、授权服务和模型进行业务验收。详细流程见[接入说明](docs/downstream-integration.md)。
