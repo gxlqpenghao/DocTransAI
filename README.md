@@ -109,7 +109,7 @@ DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传�
 uv run doctransai web --env-file .env
 ```
 
-打开 `http://127.0.0.1:8765`，选择源文档和DOCX/XLSX模板后点击“开始转换”，无需填写提示词。页面采用一屏双面板；高级设置、历史任务、诊断与审计在弹窗查看。固定填写规则维护在 `src/doctransai/prompts/document_editing_policy.md`，审计规则维护在 `src/doctransai/audit.py`。仅源文档提交给DataProxy，模板和密钥保留在本地后端。详见[本地测试页面说明](docs/local-test-ui.md)。
+打开 `http://127.0.0.1:8765`，选择源文档和DOCX/XLSX模板后点击“开始转换”，无需填写提示词。页面采用一屏双面板；模型、token和思考开关直接显示在上传区下方，历史任务、诊断与审计在弹窗查看。固定填写规则维护在 `src/doctransai/prompts/document_editing_policy.md`，审计规则维护在 `src/doctransai/audit.py`。仅源文档提交给DataProxy，模板和密钥保留在本地后端。详见[本地测试页面说明](docs/local-test-ui.md)。
 
 适合已有本地文件流水线或自有存储的业务后端。
 

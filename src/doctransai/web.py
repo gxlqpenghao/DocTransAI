@@ -147,6 +147,7 @@ class LocalApp:
 
     def configuration(self):
         checks = []
+        thinking = {}
         defaults = {'model':'kimi-k3','max_output_tokens':16000,'reasoning_effort':'auto','mode':'zip','allow_degraded':False}
         try:
             values = env_values(self.env_file)
@@ -159,13 +160,15 @@ class LocalApp:
             try:
                 llm = DoctransaiLLMClient(DoctransaiLLMConfig(env_file=self.env_file,model_name=cfg.model,
                     reasoning_effort=cfg.reasoning_effort,temperature=cfg.temperature,token_parameter=cfg.token_parameter))
+                from .settings import thinking_models
+                thinking = thinking_models(llm.base_url)
                 checks.append({'label':'LLM配置','ok':valid(llm.api_key) and valid(llm.base_url)})
             except ValueError:
                 checks.append({'label':'LLM配置','ok':False})
             checks.append({'label':'文档渲染器','ok':bool(cfg.render_script and cfg.render_script.is_file() and shutil.which(cfg.render_python))})
         except (OSError, ValueError):
             checks.append({'label':'后端配置文件','ok':False})
-        return {'version':__version__, 'token':self.token, 'defaults':defaults, 'checks':checks,
+        return {'version':__version__, 'token':self.token, 'defaults':defaults, 'checks':checks, 'thinking_models':thinking,
                 'ready':bool(checks) and all(c['ok'] for c in checks), 'max_source_bytes':MAX_SOURCE,'max_template_bytes':MAX_TEMPLATE}
 
     def launch(self, job_dir):

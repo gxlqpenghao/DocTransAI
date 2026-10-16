@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from doctransai.settings import thinking_payload
 
 
 DOCTRANSAI_LLM_API_KEY_ENV = "DOCTRANSAI_LLM_API_KEY"
@@ -143,6 +144,7 @@ class DoctransaiLLMClient:
                              or file_fallbacks.get(DOCTRANSAI_LLM_REASONING_EFFORT_ENV))
         effort = reasoning_for_model(self.model_name, configured_effort)
         self.reasoning_effort = None if effort == 'omit' else effort
+        self.thinking_parameters = thinking_payload(self.model_name, self.reasoning_effort, self.base_url)
         self.max_request_body_bytes = resolve_llm_request_body_limit_bytes(
             resolved.max_request_body_bytes,
             file_fallbacks=file_fallbacks,
@@ -177,8 +179,10 @@ class DoctransaiLLMClient:
             model_name=self.model_name,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            reasoning_effort=self.reasoning_effort,
+            reasoning_effort='omit' if self.reasoning_effort in ('on', 'off') else self.reasoning_effort,
         )
+        payload.pop('reasoning_effort', None)
+        payload.update(self.thinking_parameters)
         if self.temperature is None:
             payload.pop('temperature', None)
         if self.reasoning_effort is None:
@@ -262,8 +266,7 @@ class DoctransaiLLMClient:
         payload[self.token_parameter] = self.max_tokens
         if self.temperature is not None:
             payload['temperature'] = self.temperature
-        if self.reasoning_effort is not None:
-            payload["reasoning_effort"] = self.reasoning_effort
+        payload.update(self.thinking_parameters)
         if stream and self.stream_usage:
             payload["stream_options"] = {"include_usage": True}
         size = estimate_request_body_bytes(payload)
