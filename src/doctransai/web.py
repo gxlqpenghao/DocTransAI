@@ -165,10 +165,17 @@ class LocalApp:
                 checks.append({'label':'LLM配置','ok':valid(llm.api_key) and valid(llm.base_url)})
             except ValueError:
                 checks.append({'label':'LLM配置','ok':False})
-            checks.append({'label':'文档渲染器','ok':bool(cfg.render_script and cfg.render_script.is_file() and shutil.which(cfg.render_python))})
+            renderer_ok = bool(cfg.render_script and cfg.render_script.is_file() and shutil.which(cfg.render_python))
+            if cfg.render_script == Path(__file__).with_name('render_document.py'):
+                try:
+                    from .render_document import resolve_soffice
+                    import pypdfium2
+                    resolve_soffice(cfg.soffice)
+                except (ImportError, OSError):renderer_ok=False
+            checks.append({'label':'文档渲染器','ok':renderer_ok})
         except (OSError, ValueError):
             checks.append({'label':'后端配置文件','ok':False})
-        return {'version':__version__, 'token':self.token, 'defaults':defaults, 'checks':checks, 'thinking_models':thinking,
+        return {'application':'DocTransAI', 'version':__version__, 'token':self.token, 'defaults':defaults, 'checks':checks, 'thinking_models':thinking,
                 'ready':bool(checks) and all(c['ok'] for c in checks), 'max_source_bytes':MAX_SOURCE,'max_template_bytes':MAX_TEMPLATE}
 
     def launch(self, job_dir):
@@ -242,7 +249,8 @@ class LocalApp:
             if process.poll() is None:
                 try:
                     if os.name == 'posix':os.killpg(process.pid, signal.SIGTERM)
-                    else:process.terminate()
+                    else:
+                        subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True,timeout=10)
                 except ProcessLookupError:continue
                 try:process.wait(timeout=3)
                 except subprocess.TimeoutExpired:

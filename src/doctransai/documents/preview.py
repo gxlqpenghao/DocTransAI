@@ -48,11 +48,12 @@ class Previewer:
         script = self.config.render_script
         if path.suffix.lower() != ".pdf" and (script is None or not script.is_file()):
             raise ValueError("Set DOCTRANSAI_DOCX_RENDERER to a working render_docx.py; source/template previews are not optional silently")
+        builtin = script == Path(__file__).resolve().parents[1] / "render_document.py"
         fontconfig = os.environ.get("FONTCONFIG_FILE")
         signature = dict(content=hashlib.sha256(path.read_bytes()).hexdigest(),
                          script=hashlib.sha256(script.read_bytes()).hexdigest() if script and script.is_file() else None,
                          python=self.config.render_python, pdftoppm=self.config.pdftoppm,
-                         revision=self.config.render_revision,
+                         revision=self.config.render_revision, soffice=self.config.soffice,
                          fontconfig=fontconfig,
                          fontconfig_sha256=hashlib.sha256(Path(fontconfig).read_bytes()).hexdigest()
                          if fontconfig and Path(fontconfig).is_file() else None,
@@ -65,7 +66,7 @@ class Previewer:
             if target.exists():
                 shutil.rmtree(target)
             target.mkdir(parents=True)
-            if path.suffix.lower() == ".pdf":
+            if path.suffix.lower() == ".pdf" and not builtin:
                 cmd = [self.config.pdftoppm, "-png", "-scale-to", "1800"]
                 if page_number:
                     cmd += ["-f", str(page_number), "-l", str(page_number)]
@@ -77,6 +78,11 @@ class Previewer:
                 timeout = min(timeout, self.deadline - time.monotonic())
             if timeout <= 0:
                 raise TimeoutError("Conversion time budget exhausted before preview")
+            if builtin:
+                cmd = [self.config.render_python, "-m", "doctransai.render_document", str(path), "--output_dir", str(target), "--emit_pdf"]
+                cmd += ['--timeout-seconds',str(max(1,timeout-5))]
+                if self.config.soffice:cmd += ['--soffice',self.config.soffice]
+                if page_number and path.suffix.lower()=='.pdf':cmd += ['--page-number',str(page_number)]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if result.returncode:
                 raise ValueError("Preview failed: " + (result.stderr + result.stdout)[-1200:])
