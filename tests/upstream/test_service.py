@@ -97,3 +97,46 @@ def test_snapshot_uses_file_api_with_hash_verification(tmp_path, monkeypatch):
 def test_url_validation(url):
     with pytest.raises(ValueError):
         DataProxyClient(url, 'secret')
+
+
+def test_http_requires_exact_explicit_origin(monkeypatch):
+    monkeypatch.delenv('DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN',raising=False)
+    with DataProxyClient('http://example.test:3006','secret',allowed_http_origin='http://example.test:3006'):
+        pass
+    for url in ['http://other.test:3006','http://example.test:3007','http://example.test:3006/api','http://user@example.test:3006']:
+        with pytest.raises(ValueError):DataProxyClient(url,'secret',allowed_http_origin='http://example.test:3006')
+
+
+def test_upload_timeout_recovers_after_404_without_reupload(tmp_path):
+    source=tmp_path/'input.doc';source.write_bytes(b'fixture')
+    calls=[]
+    def handle(r):
+        calls.append(r)
+        assert r.headers['X-API-Key']=='secret'
+        assert r.headers['Idempotency-Key']=='stable'
+        if r.method=='POST':raise httpx.ReadTimeout('response lost',request=r)
+        assert r.url.path=='/api/v1/parse-jobs/by-idempotency-key'
+        return httpx.Response(404 if len(calls)==2 else 200,json={'job_id':'original','status':'running'})
+    events=[]
+    with client(handle) as dp:
+        assert dp.upload(source,request_id='stable',progress=events.append,recovery_interval=0)['job_id']=='original'
+    assert [r.method for r in calls]==['POST','GET','GET']
+    assert len(events)==2
+
+
+def test_unresolved_upload_preserves_unknown_outcome(tmp_path):
+    from doctransai.upstream.dataproxy.service import UploadOutcomeUnknown
+    source=tmp_path/'input.doc';source.write_bytes(b'fixture');methods=[]
+    def handle(r):
+        methods.append(r.method)
+        if r.method=='POST':raise httpx.ReadTimeout('lost',request=r)
+        return httpx.Response(404)
+    with client(handle) as dp:
+        with pytest.raises(UploadOutcomeUnknown):dp.upload(source,request_id='stable',recovery_attempts=2,recovery_interval=0)
+    assert methods==['POST','GET','GET']
+
+
+def test_lookup_authorization_error_is_not_retried():
+    with client(lambda r:httpx.Response(403)) as dp:
+        with pytest.raises(DataProxyError) as exc:dp.find_by_request_id('stable')
+    assert exc.value.status==403

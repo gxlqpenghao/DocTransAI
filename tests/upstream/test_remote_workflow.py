@@ -62,14 +62,16 @@ def test_failed_conversion_cannot_publish(tmp_path):
         publish_workspace(base_url='https://example.test', api_key='secret', receipt_path=receipt)
 
 
-def test_upload_failure_preserves_request_id_without_secret(tmp_path):
+def test_upload_failure_preserves_request_id_without_secret(tmp_path, monkeypatch):
+    from doctransai.upstream.dataproxy.service import UploadOutcomeUnknown
+    monkeypatch.setattr("doctransai.upstream.dataproxy.service.time.sleep", lambda _: None)
     from doctransai.upstream.dataproxy.workflow import run_remote
     from doctransai.config import RuntimeConfig
     source, template = tmp_path / 'source.txt', tmp_path / 'template.docx'
     source.write_text('source'); template.write_bytes(b'placeholder')
     def handle(r):
         raise httpx.ReadTimeout('unknown submit outcome')
-    with pytest.raises(httpx.ReadTimeout):
+    with pytest.raises(UploadOutcomeUnknown):
         run_remote(base_url='https://example.test', api_key='private-key', template=template,
                    source=source, output_dir=tmp_path / 'run', instruction='fill', config=RuntimeConfig(),
                    request_id='stable-upload-id', transport=httpx.MockTransport(handle))

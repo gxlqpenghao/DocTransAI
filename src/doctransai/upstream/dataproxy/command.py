@@ -38,7 +38,8 @@ def main(argv):
         a.base_url = a.base_url or setting('DOCTRANSAI_DATAPROXY_BASE_URL', values)
         if not a.base_url or not key:
             raise ValueError('Configure DOCTRANSAI_DATAPROXY_BASE_URL and DOCTRANSAI_DATAPROXY_API_KEY')
-        common = dict(base_url=a.base_url, api_key=key, timeout=a.timeout_seconds)
+        common = dict(base_url=a.base_url, api_key=key, timeout=a.timeout_seconds,
+                      allowed_http_origin=setting('DOCTRANSAI_DATAPROXY_ALLOWED_HTTP_ORIGIN', values))
         if a.publish_receipt:
             result = publish_workspace(receipt_path=a.publish_receipt, replace_audit=a.replace_audit, **common)
         else:
