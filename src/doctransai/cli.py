@@ -39,6 +39,16 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser('desktop', help='Check configuration and open the local test page')
     commands.add_parser('web', help='Start the local document conversion test page (web --help)')
     commands.add_parser('remote', help='Convert through DataProxy ZIP or workspace APIs (remote --help)')
+    structured_parser = commands.add_parser('structured', help='Convert structured business records without DataProxy parsing')
+    structured_parser.add_argument('--input-json', type=Path, required=True, help='Structured business-record JSON payload')
+    structured_parser.add_argument('--template', type=Path, required=True)
+    structured_parser.add_argument('--output-dir', type=Path, required=True, help='New run directory')
+    structured_parser.add_argument('--instruction')
+    structured_parser.add_argument('--audit', action='store_true', help='Run the optional independent field audit after conversion')
+    structured_parser.add_argument('--env-file', type=Path)
+    add_model_arguments(structured_parser)
+    structured_parser.add_argument('--max-steps', type=int, default=12)
+    structured_parser.add_argument('--timeout-seconds', type=float, default=900)
     commands.add_parser('audit', help='Assess template positions in an existing conversion (audit --help)')
     parse_parser = commands.add_parser("parse", help="Upload a source to the DataProxy service and validate its package")
     parse_parser.add_argument("--source-file", type=Path, required=True)
@@ -92,6 +102,30 @@ def main(argv: list[str] | None = None) -> int:
             message = str(exc).replace(secret, "<redacted>") if secret else str(exc)
             print(message, file=sys.stderr)
             return 1
+    if args.command == "structured":
+        from doctransai.config import RuntimeConfig
+        from doctransai.conversion import convert
+        from doctransai.data_layer.structured import materialize_structured_bundle
+        from doctransai.types import TaskSpec
+        try:
+            if args.output_dir.exists():
+                raise ValueError('Use a new run directory; existing structured runs are not overwritten')
+            payload = json.loads(args.input_json.read_text(encoding='utf-8'))
+            bundle = materialize_structured_bundle(payload, args.output_dir / 'input')
+            config = RuntimeConfig.from_environment(env_file=args.env_file, **model_overrides(args),
+                    max_steps=args.max_steps, max_seconds=args.timeout_seconds,
+                    review_enabled=False, _default_output_tokens=16000)
+            result = convert(TaskSpec(bundle, args.template, args.output_dir / 'conversion', args.instruction),
+                             config=config, progress=lambda text: print(text, file=sys.stderr, flush=True))
+            response = {'conversion': asdict(result), 'input_mode': 'structured', 'bundle': str(bundle)}
+            if args.audit and result.execution_status == 'completed':
+                from doctransai.audit import audit_document
+                response['audit'] = audit_document(args.output_dir / 'conversion', config=config)
+            print(json.dumps(response, ensure_ascii=False, indent=2, default=str))
+            return 0 if result.execution_status == 'completed' else 1
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     if args.command in ("convert", "review"):
         from doctransai.config import RuntimeConfig
         from doctransai.conversion import convert

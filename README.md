@@ -88,6 +88,10 @@ DOCTRANSAI_LLM_TOKEN_PARAMETER=max_tokens
 
 DataProxy地址不含`/api`；知识库由授权Key决定，业务请求不传任意知识库ID。源文档上传到授权知识库后，管理员可按权限审阅解析任务和资产。
 
+### 结构化业务数据接入
+
+已有数据库记录的业务系统可使用结构化输入模式，不需要先制作一份原始文档交给DataProxy。该模式只新增输入适配层，继续复用模板转换、渲染和审计能力；原有DataProxy文件接入模式保持不变。输入格式和本地命令见[`docs/structured-input.md`](docs/structured-input.md)。
+
 ### 切换模型
 
 设置`DOCTRANSAI_LLM_MODEL`或传`--model <服务商模型ID>`，无需修改代码。当前模型适配层使用`POST <基址>/chat/completions`、Bearer鉴权、SSE流式响应、图片消息和function tool calls。原生的其他API协议需要兼容网关或额外适配器。

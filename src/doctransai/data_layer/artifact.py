@@ -125,5 +125,15 @@ def read_source_input(path: Path, work_dir: Path):
     if path.is_dir():
         path = path / 'manifest.json'
     if path.name == 'manifest.json':
+        # Structured business-record inputs use the same data-asset component
+        # shape but intentionally do not claim to be a DataProxy parse artifact.
+        # Keep this compatibility branch narrow so ordinary parse artifacts
+        # continue through their full integrity and authorization validation.
+        try:
+            header = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            header = {}
+        if header.get('contract_version') == 'data_asset_pack' and header.get('capabilities', {}).get('structured_input') is True:
+            return read_parsed_document_bundle(path, validate=False, resource_root=path.parent)
         return read_artifact(path)
     return read_parsed_document_bundle(path)
