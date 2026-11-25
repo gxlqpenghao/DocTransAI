@@ -186,8 +186,8 @@ def save_audit(run_dir, audit):
     public = delivery_audit(audit)
     audit['counts'] = public['counts']
     # Full provenance/diagnostic material is local-only, not audit.json delivery.
-    (run_dir / 'audit-diagnostics.json').write_text(json.dumps(audit, ensure_ascii=False, indent=2, default=str))
-    (run_dir / 'audit.json').write_text(json.dumps(public, ensure_ascii=False, indent=2, default=str))
+    (run_dir / 'audit-diagnostics.json').write_text(json.dumps(audit, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    (run_dir / 'audit.json').write_text(json.dumps(public, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     audit = public
     rows = []
     for f in sorted(audit['fields'], key=lambda f: ['filled_low','unfilled','filled_high','not_field'].index(f['category'])):
@@ -205,7 +205,7 @@ def save_audit(run_dir, audit):
     page += '<select onchange="document.querySelectorAll(\'tr[data-category]\').forEach(r=>r.hidden=this.value!==\'all\'&&r.dataset.category!==this.value)"><option value="all">全部位置</option>'
     page += ''.join(f'<option value="{k}">{v}</option>' for k,v in LABELS.items() if k in DELIVERY_CATEGORIES) + '</select><table><tr><th>模板位置</th><th>分类</th><th>填写结果</th><th>理由与人工核对</th></tr>' + ''.join(rows) + '</table>'
     page += '<details><summary>完整操作记录（含拒绝与回滚）</summary><pre>' + escape(json.dumps(audit['operations'], ensure_ascii=False, indent=2)) + '</pre></details></html>'
-    (run_dir / 'audit.html').write_text(page)
+    (run_dir / 'audit.html').write_text(page, encoding="utf-8")
 
 
 def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client=None, semantic=True, progress=None):

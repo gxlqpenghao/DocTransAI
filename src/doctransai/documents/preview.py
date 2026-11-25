@@ -89,7 +89,7 @@ class Previewer:
             pages = sorted(target.glob("page-*.png"), key=lambda p: int(re.search(r"(\d+)$", p.stem).group()))
             if not pages:
                 raise ValueError("Preview returned no page images")
-            manifest.write_text(json.dumps([p.name for p in pages]))
+            manifest.write_text(json.dumps([p.name for p in pages]), encoding="utf-8")
         pages = [target / name for name in json.loads(manifest.read_text(encoding="utf-8"))]
         if not all(p.is_file() for p in pages):
             manifest.unlink()

@@ -201,7 +201,7 @@ def review_and_repair(source, editor, previewer, initial, client, config, output
             history.append(dict(phase=phase,status='incomplete',error=message[:1500]))
             return dict(status='incomplete',rounds=history,issues=[],reason='Independent review did not complete')
         history.append(dict(phase=phase,**review))
-        (output_dir/f'{phase}.json').write_text(json.dumps(review,ensure_ascii=False,indent=2))
+        (output_dir/f'{phase}.json').write_text(json.dumps(review,ensure_ascii=False,indent=2), encoding="utf-8")
         if review['status']=='passed':return dict(status='passed',rounds=history,issues=[])
         repairable=[i for i in review['issues'] if i['repairable']]
         if round_number == config.max_repair_rounds or not repairable:

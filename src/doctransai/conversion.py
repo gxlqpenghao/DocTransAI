@@ -60,7 +60,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             review_prompt_sha256=hashlib.sha256((Path(__file__).parent / "prompts/document_review_policy.md").read_bytes()).hexdigest(),
             review_tool_sha256=hashlib.sha256(json.dumps(REVIEW_TOOL,sort_keys=True).encode()).hexdigest(),
             prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
-            tools_sha256=hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()), default=str, ensure_ascii=False, indent=2))
+            tools_sha256=hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()), default=str, ensure_ascii=False, indent=2), encoding="utf-8")
         if progress:
             progress("读取DataProxy原生材料")
         corpus = (read_source_input(task.bundle_path, output_dir)
@@ -242,22 +242,22 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                   total_tokens=sum(u.get("total_tokens", 0) or 0 for u in usage_events),
                   thinking_tokens=sum(d.get("reasoning_tokens", 0) or 0 for d in usage_detail),
                   image_tokens=sum(d.get("image_tokens", 0) or 0 for d in prompt_detail))
-    report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
+    report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2), encoding="utf-8")
     if editor is not None:
         try:
             final_snapshot = editor.inspect()
             if isinstance(editor, XlsxEditor):
                 final_snapshot = editor.inspect(node_ids=[f"{s['id']}!{s['used_range']}" for s in final_snapshot['sheets']])
-            (output_dir / 'audit-final-snapshot.json').write_text(json.dumps(final_snapshot, ensure_ascii=False, default=str))
+            (output_dir / 'audit-final-snapshot.json').write_text(json.dumps(final_snapshot, ensure_ascii=False, default=str), encoding="utf-8")
         except Exception as exc:
             report['audit_snapshot_error'] = type(exc).__name__
-            report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
+            report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2), encoding="utf-8")
     from doctransai.audit import audit_document
     try:
         audit_document(output_dir, semantic=False)
     except Exception as exc:
         report['audit_ledger_error'] = type(exc).__name__
-        report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2))
+        report_path.write_text(json.dumps(report, default=str, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
 
 
