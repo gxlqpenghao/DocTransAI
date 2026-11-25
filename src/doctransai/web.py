@@ -390,6 +390,8 @@ def make_server(app,port=8765,host='127.0.0.1'):
 
         def permitted(self):
             port=self.server.server_port
+            if getattr(self.server, 'allow_remote_ui', False):
+                return True
             return self.headers.get('Host') in {f'127.0.0.1:{port}',f'localhost:{port}'}
 
         def send_file(self,file,content_type,headers):
@@ -477,7 +479,9 @@ def make_server(app,port=8765,host='127.0.0.1'):
                 return self.send(400,{'error':safe_message(exc,values)})
             except RuntimeError as exc:return self.send(409,{'error':str(exc)})
             finally:app.upload_gate.release()
-    return ThreadingHTTPServer(('127.0.0.1',port),Handler)
+    server = ThreadingHTTPServer((host, port), Handler)
+    server.allow_remote_ui = host not in {'127.0.0.1', 'localhost', '::1'}
+    return server
 
 
 def main(argv=None):
