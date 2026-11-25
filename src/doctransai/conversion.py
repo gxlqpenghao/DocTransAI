@@ -114,7 +114,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
                        source=initial_source, document=reference_snapshot)
         if task.instruction is not None:
             initial['instruction'] = task.instruction
-        (output_dir / "input.json").write_text(json.dumps(initial, ensure_ascii=False, indent=2))
+        (output_dir / "input.json").write_text(json.dumps(initial, ensure_ascii=False, indent=2), encoding="utf-8")
         parts = [{"type": "text", "text": json.dumps(initial, ensure_ascii=False)}]
         prepared_source_image_paths = []
         for number, path in enumerate(source_page_paths, 1):
