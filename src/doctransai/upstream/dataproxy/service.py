@@ -157,7 +157,7 @@ class DataProxyClient:
     def artifact(self, job_id, destination):
         archive = self.download('GET', self.job_path(job_id) + '/artifact', destination / 'artifact.zip')
         manifest = unpack_artifact(archive, destination / 'package')
-        if json.loads(manifest.read_text())['job_id'] != job_id:
+        if json.loads(manifest.read_text(encoding="utf-8"))['job_id'] != job_id:
             raise ValueError('Artifact job identity mismatch')
         return manifest
 

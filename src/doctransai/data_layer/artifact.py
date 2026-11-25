@@ -66,8 +66,8 @@ def _hash(path):
 def read_artifact(manifest_path: Path):
     manifest_path = manifest_path.resolve()
     root = manifest_path.parent
-    manifest = json.loads(manifest_path.read_text())
-    schema = json.loads((Path(__file__).parent / 'contracts/parse_artifact_manifest.schema.json').read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads((Path(__file__).parent / 'contracts/parse_artifact_manifest.schema.json').read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(manifest)
     quality = manifest['quality']
     if quality['status'] == 'failed' or quality['parse_errors']:
@@ -101,7 +101,7 @@ def read_artifact(manifest_path: Path):
     entry = manifest['entrypoints']['parsed_document_bundle']
     required(entry['schema_path'])
     bundle = required(entry['path'])
-    raw = json.loads(bundle.read_text())
+    raw = json.loads(bundle.read_text(encoding="utf-8"))
     if raw['contract_version'] != entry['contract_version']:
         raise ValueError('Inner contract does not match manifest')
     for descriptor in raw['components'].values():

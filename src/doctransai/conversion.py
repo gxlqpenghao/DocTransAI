@@ -53,7 +53,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             raise ValueError("Review requires matching document/template formats and enabled review")
         reference_hash = hashlib.sha256(task.template_path.read_bytes()).hexdigest()
         tools = tools_for_format(suffix[1:])
-        prompt = (Path(__file__).parent / "prompts/document_editing_policy.md").read_text()
+        prompt = (Path(__file__).parent / "prompts/document_editing_policy.md").read_text(encoding="utf-8")
         (output_dir / "task.json").write_text(json.dumps(dict(task=asdict(task), config=asdict(config),
             existing_document=str(existing_document) if existing_document else None,
             existing_document_sha256=hashlib.sha256(existing_document.read_bytes()).hexdigest() if existing_document else None,
@@ -220,7 +220,7 @@ def convert(task: TaskSpec, *, config: RuntimeConfig | None = None, client=None,
             matches_current_draft=bool(runtime and runtime.preview_version == editor.version))
         report.update(draft_path=str(draft) if draft else None,
                       structural_check="not_completed")
-    events = [json.loads(line) for log in sorted(output_dir.glob("*.jsonl")) for line in log.read_text().splitlines()]
+    events = [json.loads(line) for log in sorted(output_dir.glob("*.jsonl")) for line in log.read_text(encoding="utf-8").splitlines()]
     requests = [e for e in events if e.get("kind") in ("model", "model_error")]
     model_events = [e for e in events if e.get("kind") == "model"]
     usage_events = [e.get("usage") for e in model_events if isinstance(e.get("usage"), dict)]

@@ -67,7 +67,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
                     ws = dp.create_workspace(job_id, receipt['run_id'])
                 save(workspace_id=ws['workspace_id'])
                 manifest = dp.materialize(ws['workspace_id'], output_dir / 'input' / 'package', job_id=job_id)
-            quality = json.loads(manifest.read_text())['quality']
+            quality = json.loads(manifest.read_text(encoding="utf-8"))['quality']
             if quality['status'] != 'complete' and not (allow_degraded and quality['status'] == 'degraded'):
                 raise ValueError('Artifact quality rejected')
             save(status='input_validated', manifest=str(manifest))
@@ -89,7 +89,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
             event('publishing', '正在回写工作区并校验导出文件。')
             publish_workspace(base_url=base_url, api_key=api_key, receipt_path=receipt_path,
                               timeout=timeout, transport=transport, allowed_http_origin=allowed_http_origin)
-            receipt = json.loads(receipt_path.read_text())
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         else:
             save(status='completed')
         event('completed', '转换与字段审计已完成。')
@@ -102,7 +102,7 @@ def run_remote(*, base_url: str, api_key: str, template: Path, output_dir: Path,
 
 
 def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, transport=None, replace_audit=False, allowed_http_origin=None):
-    receipt = json.loads(receipt_path.read_text())
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     if receipt.get('mode') != 'workspace' or receipt.get('conversion', {}).get('execution_status') != 'completed':
         raise ValueError('Only a completed workspace conversion may be published')
     root = receipt_path.parent
@@ -111,7 +111,7 @@ def publish_workspace(*, base_url, api_key, receipt_path: Path, timeout=1800, tr
     if len(files) != 2 or not all(p.is_file() for p in files):
         raise ValueError('Completed conversion result or review report missing')
     audit_path = root / 'conversion' / 'audit.json'
-    audit = json.loads(audit_path.read_text())
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
     if audit['status'] != 'assessed' or audit['document_sha256'] != hashlib.sha256(files[0].read_bytes()).hexdigest():
         raise ValueError('Completed field audit matching the output is required')
     files += [audit_path, root / 'conversion' / 'audit.html']

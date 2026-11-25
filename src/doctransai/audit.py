@@ -21,9 +21,9 @@ LABELS = {'filled_high': '已填入 · 确信度高', 'filled_low': '已填入 �
 
 
 def ledger(run_dir: Path):
-    report = json.loads((run_dir / 'review.json').read_text())
-    initial = json.loads((run_dir / 'input.json').read_text()) if (run_dir / 'input.json').exists() else {}
-    events = [json.loads(l) for l in (run_dir / 'trace.jsonl').read_text().splitlines()] if (run_dir / 'trace.jsonl').exists() else []
+    report = json.loads((run_dir / 'review.json').read_text(encoding="utf-8"))
+    initial = json.loads((run_dir / 'input.json').read_text(encoding="utf-8")) if (run_dir / 'input.json').exists() else {}
+    events = [json.loads(l) for l in (run_dir / 'trace.jsonl').read_text(encoding="utf-8").splitlines()] if (run_dir / 'trace.jsonl').exists() else []
     snapshot = initial.get('document', {})
     nodes = {n['id']: dict(n) for n in snapshot.get('nodes', [])}
     before = dict(nodes)
@@ -46,7 +46,7 @@ def ledger(run_dir: Path):
             for node in result.get('nodes', []):
                 nodes[node['id']] = dict(node)
     if (run_dir / 'audit-final-snapshot.json').exists():
-        final_snapshot = json.loads((run_dir / 'audit-final-snapshot.json').read_text())
+        final_snapshot = json.loads((run_dir / 'audit-final-snapshot.json').read_text(encoding="utf-8"))
         nodes = {n['id']: n for n in final_snapshot.get('nodes', [])}
     candidates = []
     for key, node in {**before, **nodes}.items():
@@ -217,7 +217,7 @@ def audit_document(run_dir: Path, *, config: RuntimeConfig | None = None, client
         return delivery_audit(audit)
     config = config or RuntimeConfig.from_environment(_default_output_tokens=16000)
     try:
-        report = json.loads((run_dir / 'review.json').read_text())
+        report = json.loads((run_dir / 'review.json').read_text(encoding="utf-8"))
         if report.get('execution_status') != 'completed' or not audit['fields']:
             raise ValueError('A completed conversion and nonempty template inventory are required')
         document = Path(report['output_path'])
