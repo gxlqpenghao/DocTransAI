@@ -22,6 +22,7 @@ import time
 from urllib.parse import quote, urlsplit
 import uuid
 import zipfile
+import base64
 
 from . import __version__
 from .config import RuntimeConfig
@@ -54,6 +55,11 @@ def safe_message(value, values):
         if ('KEY' in k or 'TOKEN' in k or 'SECRET' in k) and isinstance(v, str) and v:
             text = text.replace(v, '<已隐藏>')
     return text[:1000]
+
+
+def _configured_api_key(env_file):
+    values = env_values(env_file)
+    return setting('DOCTRANSAI_STRUCTURED_API_KEY', values, '')
 
 
 def settings_config(settings, env_file):
@@ -145,7 +151,7 @@ class LocalApp:
                 state.update(status='interrupted', message='本地服务已重启，此任务没有自动重跑。请查阅运行记录中的解析任务ID。')
                 save_receipt(path, state)
 
-    def configuration(self):
+    def configuration(self, *, structured=False):
         checks = []
         thinking = {}
         defaults = {'model':'kimi-k3','max_output_tokens':16000,'reasoning_effort':'auto','mode':'zip','allow_degraded':True}
@@ -156,7 +162,10 @@ class LocalApp:
             from .llm.client import DoctransaiLLMClient, DoctransaiLLMConfig
             def valid(v):
                 return bool(v) and not any(x in v for x in ('replace-with','example.com','example/v1','<'))
-            checks.append({'label':'DataProxy授权', 'ok': valid(setting('DOCTRANSAI_DATAPROXY_API_KEY',values)) and valid(setting('DOCTRANSAI_DATAPROXY_BASE_URL',values))})
+            if structured:
+                checks.append({'label':'结构化接口授权', 'ok': valid(setting('DOCTRANSAI_STRUCTURED_API_KEY', values))})
+            else:
+                checks.append({'label':'DataProxy授权', 'ok': valid(setting('DOCTRANSAI_DATAPROXY_API_KEY',values)) and valid(setting('DOCTRANSAI_DATAPROXY_BASE_URL',values))})
             try:
                 llm = DoctransaiLLMClient(DoctransaiLLMConfig(env_file=self.env_file,model_name=cfg.model,
                     reasoning_effort=cfg.reasoning_effort,temperature=cfg.temperature,token_parameter=cfg.token_parameter))
@@ -214,6 +223,49 @@ class LocalApp:
                 raise
             return self.status(job_id)
 
+    def submit_structured(self, payload):
+        if not self.configuration(structured=True)['ready']:
+            raise ValueError('结构化后台配置尚未就绪。请配置结构化接口Key、LLM与文档渲染器。')
+        if not isinstance(payload, dict):
+            raise ValueError('结构化请求必须是JSON对象。')
+        template_name = str(payload.get('template_name') or 'template.docx').replace('\\', '/')
+        template_name = template_name.rsplit('/', 1)[-1]
+        template_b64 = payload.get('template_base64')
+        if not template_b64 or not isinstance(template_b64, str):
+            raise ValueError('template_base64不能为空。')
+        try:
+            template_data = base64.b64decode(template_b64, validate=True)
+        except Exception as exc:
+            raise ValueError('template_base64无效。') from exc
+        suffix = Path(template_name).suffix.lower()
+        if suffix not in TEMPLATE_TYPES or not template_data or len(template_data) > MAX_TEMPLATE:
+            raise ValueError('结构化模板仅支持有效的DOCX/XLSX，大小不超过20 MiB。')
+        request = dict(payload)
+        request.pop('template_base64', None)
+        request['template_name'] = template_name
+        with self.lock:
+            if self.stopping:
+                raise RuntimeError('本地服务正在停止。')
+            if any(p.poll() is None for p in self.processes.values()):
+                raise RuntimeError('已有任务正在运行，请等待完成后再提交。')
+            job_id = uuid.uuid4().hex
+            job_dir = self.root/job_id
+            job_dir.mkdir(mode=0o700)
+            (job_dir/'template').mkdir()
+            (job_dir/'template'/template_name).write_bytes(template_data)
+            request['structured'] = True
+            save_receipt(job_dir/'request.json', request)
+            state = dict(id=job_id,status='queued',phase='queued',message='结构化任务已创建，准备开始。',
+                         source='structured-records',template=template_name,mode='structured',created_at=time.time(),events=[])
+            save_receipt(job_dir/'web-job.json',state)
+            try:
+                self.processes[job_id] = self.launcher(job_dir)
+            except Exception:
+                state.update(status='failed',message='无法启动结构化转换进程。')
+                save_receipt(job_dir/'web-job.json',state)
+                raise
+            return self.status(job_id)
+
     def job_dir(self, job_id):
         if not re.fullmatch('[0-9a-f]{32}',job_id):
             raise FileNotFoundError
@@ -264,6 +316,7 @@ class LocalApp:
 
 def run_worker(job_dir, env_file):
     from .upstream.dataproxy.workflow import run_remote
+    from .conversion import convert
     path=Path(job_dir).resolve();request=read_json(path/'request.json');state=read_json(path/'web-job.json')
     values={}
     def update(phase=None,message=None,**extra):
@@ -275,6 +328,23 @@ def run_worker(job_dir, env_file):
         state.update(extra,updated_at=time.time());save_receipt(path/'web-job.json',state)
     try:
         values=env_values(env_file)
+        if request.get('structured'):
+            from .data_layer.structured import materialize_structured_bundle
+            from .types import TaskSpec
+            update('preparing','正在准备结构化业务记录。',status='running')
+            cfg=settings_config(request.get('settings') or {},env_file)
+            bundle=materialize_structured_bundle(request.get('records_payload') or {}, path/'run'/'input')
+            update('converting','正在依据结构化业务记录填写模板。')
+            result=convert(TaskSpec(bundle, path/'template'/request['template_name'], path/'run'/'conversion', request.get('instruction')),
+                           config=cfg, progress=lambda message:update(message=message))
+            if result.execution_status != 'completed':
+                update(message='结构化转换未完成。',status='failed'); return
+            if request.get('audit'):
+                from .audit import audit_document
+                update('auditing','正在生成字段审计。')
+                audit_document(path/'run'/'conversion', config=cfg)
+            update('completed','结构化转换已完成，可以下载成品。',status='completed')
+            return
         update('parsing','开始解析源文档。',status='running')
         cfg=settings_config(request['settings'],env_file)
         result=run_remote(base_url=setting('DOCTRANSAI_DATAPROXY_BASE_URL',values),
@@ -301,7 +371,7 @@ def run_worker(job_dir, env_file):
         update(message=reason,status='failed')
 
 
-def make_server(app,port=8765):
+def make_server(app,port=8765,host='127.0.0.1'):
     static=Path(__file__).parent/'web_static'
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):
@@ -336,9 +406,20 @@ def make_server(app,port=8765):
                 except (BrokenPipeError,ConnectionResetError):pass
 
         def do_GET(self):
-            if not self.permitted():return self.send(403,{'error':'仅允许本机访问。'})
+            if not self.permitted() and urlsplit(self.path).path not in {'/health','/api/v1/structured/jobs'}:
+                return self.send(403,{'error':'请求来源不被允许。'})
             route=urlsplit(self.path).path
             try:
+                if route == '/health':
+                    return self.send(200, {'status':'ok','application':'DocTransAI','version':__version__})
+                match_structured=re.fullmatch(r'/api/v1/structured/jobs/([0-9a-f]{32})(?:/files/([a-z.-]+))?',route)
+                if match_structured:
+                    job_id,name=match_structured.groups()
+                    if not name:return self.send(200,app.status(job_id))
+                    if name not in FILES:raise FileNotFoundError
+                    root=app.job_dir(job_id)/'run';file=root/FILES[name]
+                    if not file.resolve().is_relative_to(root.resolve()) or not file.is_file():raise FileNotFoundError
+                    return self.send_file(file,mimetypes.guess_type(name)[0] or 'application/octet-stream',{'Content-Disposition':f"attachment; filename*=UTF-8''{quote(name)}"})
                 if route in {'/','/app.js','/style.css'}:
                     name='index.html' if route=='/' else route[1:]
                     content_type={'index.html':'text/html; charset=utf-8','app.js':'text/javascript; charset=utf-8','style.css':'text/css; charset=utf-8'}[name]
@@ -362,9 +443,25 @@ def make_server(app,port=8765):
 
         def do_POST(self):
             origin=self.headers.get('Origin')
-            if not self.permitted() or (origin and origin!='http://'+self.headers.get('Host','')) or not secrets.compare_digest(self.headers.get('X-DocTransAI-Token',''),app.token):
+            route=urlsplit(self.path).path
+            structured_route=route=='/api/v1/structured/jobs'
+            if structured_route:
+                if not secrets.compare_digest(self.headers.get('X-DocTransAI-Key',''), _configured_api_key(app.env_file)):
+                    return self.send(403,{'error':'结构化接口授权失败。'})
+            elif not self.permitted() or (origin and origin!='http://'+self.headers.get('Host','')) or not secrets.compare_digest(self.headers.get('X-DocTransAI-Token',''),app.token):
                 return self.send(403,{'error':'请求校验失败，请刷新本地页面。'})
-            if urlsplit(self.path).path!='/api/jobs':return self.send(404,{'error':'接口不存在。'})
+            if route not in {'/api/jobs','/api/v1/structured/jobs'}:return self.send(404,{'error':'接口不存在。'})
+            if structured_route:
+                try:
+                    length=int(self.headers.get('Content-Length','0'))
+                    if not 0<length<=MAX_REQUEST:return self.send(413,{'error':'请求大小超限。'})
+                    self.connection.settimeout(60); body=self.rfile.read(length)
+                    if len(body)!=length:raise ValueError('上传中断。')
+                    payload=json.loads(body.decode('utf-8'))
+                    return self.send(202,app.submit_structured(payload))
+                except (ValueError,UnicodeError,OSError,json.JSONDecodeError) as exc:
+                    return self.send(400,{'error':safe_message(exc,env_values(app.env_file))})
+                except RuntimeError as exc:return self.send(409,{'error':str(exc)})
             if not app.upload_gate.acquire(blocking=False):return self.send(409,{'error':'已有上传正在处理，请稍后重试。'})
             try:
                 length=int(self.headers.get('Content-Length','0'))
@@ -388,12 +485,13 @@ def main(argv=None):
     p.add_argument('--env-file',type=Path)
     p.add_argument('--port',type=int,default=8765)
     p.add_argument('--runs-dir',type=Path,default=Path('outputs/web'))
+    p.add_argument('--host',default='127.0.0.1')
     p.add_argument('--worker',type=Path,help=argparse.SUPPRESS)
     a=p.parse_args(argv)
     if a.worker:
         run_worker(a.worker,a.env_file);return 0
     app=LocalApp(a.runs_dir,a.env_file)
-    server=make_server(app,a.port)
+    server=make_server(app,a.port,a.host)
     print(f'DocTransAI测试页：http://127.0.0.1:{server.server_port}',flush=True)
     print('仅源文档发送给DataProxy；模板和密钥保留在本地后端。按Ctrl+C停止。',flush=True)
     try:server.serve_forever()

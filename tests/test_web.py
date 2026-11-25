@@ -1,5 +1,6 @@
 import io
 import json
+import base64
 from pathlib import Path
 import threading
 from types import SimpleNamespace
@@ -16,7 +17,7 @@ from doctransai.upstream.dataproxy.service import save_receipt
 def app(tmp_path):
     renderer=tmp_path/'render_docx.py';renderer.write_text('# fixture')
     env=tmp_path/'private.env'
-    env.write_text(f'DOCTRANSAI_DATAPROXY_BASE_URL=https://service.invalid\nDOCTRANSAI_DATAPROXY_API_KEY=private-upstream-key\nDOCTRANSAI_LLM_BASE_URL=https://provider.invalid/v1\nDOCTRANSAI_LLM_API_KEY=private-llm-key\nDOCTRANSAI_DOCX_RENDERER={renderer}\n')
+    env.write_text(f'DOCTRANSAI_DATAPROXY_BASE_URL=https://service.invalid\nDOCTRANSAI_DATAPROXY_API_KEY=private-upstream-key\nDOCTRANSAI_LLM_BASE_URL=https://provider.invalid/v1\nDOCTRANSAI_LLM_API_KEY=private-llm-key\nDOCTRANSAI_STRUCTURED_API_KEY=structured-key\nDOCTRANSAI_DOCX_RENDERER={renderer}\n')
     return LocalApp(tmp_path/'jobs',env,launcher=lambda path:SimpleNamespace(poll=lambda:None))
 
 
@@ -45,6 +46,24 @@ def test_frontend_and_config_do_not_disclose_keys(server):
     r=client.get('/api/config')
     assert r.json()['ready']
     assert 'private-llm-key' not in r.text and 'private-upstream-key' not in r.text
+
+
+def test_structured_api_accepts_records_with_separate_key(server):
+    client, app = server
+    payload = {
+        'template_name': 'template.docx',
+        'template_base64': base64.b64encode(template()).decode(),
+        'records_payload': {'records': [{'record_id': 'r1', 'fields': {'项目名称': '测试项目'}}]},
+        'settings': {},
+    }
+    r = client.post('/api/v1/structured/jobs', headers={'X-DocTransAI-Key': 'structured-key'}, json=payload)
+    assert r.status_code == 202, r.text
+    job = r.json()['id']
+    request = json.loads((app.root / job / 'request.json').read_text())
+    assert request['structured'] is True
+    assert request['records_payload']['records'][0]['record_id'] == 'r1'
+    assert client.get('/api/v1/structured/jobs/' + job).status_code == 200
+    assert client.post('/api/v1/structured/jobs', headers={'X-DocTransAI-Key': 'wrong'}, json=payload).status_code == 403
 
 
 def test_only_local_same_origin_token_requests_can_submit(server):
